@@ -1,111 +1,115 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-export const revalidate = 0
+type Item = {
+  id: number
+  title: string
+  category: string
+  purchase_price: number
+  estimated_profit: number
+  score: number
+  rank: string
+  memo: string
+  url: string
+}
 
-export default async function HomePage() {
-  const { data: items, error } = await supabase
-    .from('surging_items')
-    .select('*')
-    .order('created_at', { ascending: false })
+export default function Home() {
+  const [items, setItems] = useState<Item[]>([])
 
-  if (error) {
-    return (
-      <main style={{ padding: '20px', textAlign: 'center', color: 'white', backgroundColor: '#0f172a', minHeight: '100vh' }}>
-        <h2>データの読み込みに失敗しました</h2>
-        <p>Supabaseの接続設定（環境変数）を確認してください。</p>
-      </main>
-    )
+  const fetchItems = async () => {
+    const { data } = await supabase
+      .from('items')
+      .select('*')
+      .order('id', { ascending: false })
+    if (data) setItems(data)
   }
 
+  useEffect(() => {
+    fetchItems()
+
+    // リアルタイム変更検知の設定
+    const channel = supabase
+      .channel('realtime-items')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'items' },
+        () => {
+          fetchItems()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
   return (
-    <main style={{ backgroundColor: '#0f172a', minHeight: '100vh', color: '#f8fafc', padding: '16px', fontFamily: 'sans-serif' }}>
-      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-        <header style={{ borderBottom: '1px solid #334155', paddingBottom: '16px', marginBottom: '24px' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#38bdf8', margin: '0 0 8px 0' }}>
+    <main className="min-h-screen bg-slate-950 text-white p-4 sm:p-8">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
             🔥 せどりAI 利益商品ダッシュボード
           </h1>
-          <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>
-            自動収集・AI解析されたリアルタイムデータ一覧
+          <p className="text-slate-400 text-sm mt-1">
+            自動収集・AI解析されたリアルタイムデータ一覧（自動更新有効）
           </p>
-        </header>
+        </div>
 
-        <div style={{ display: 'grid', gap: '16px' }}>
-          {items && items.length > 0 ? (
-            items.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  backgroundColor: '#1e293b',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  border: '1px solid #334155'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ backgroundColor: '#f59e0b22', color: '#fbbf24', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>
-                    【{item.ai_rank || 'A'}ランク】 スコア: {item.ai_score || 0}
-                  </span>
-                  <span style={{ color: '#94a3b8', fontSize: '12px' }}>
-                    {item.category || 'カテゴリ指定なし'}
-                  </span>
-                </div>
-
-                <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: '8px 0', color: '#f1f5f9' }}>
-                  {item.item_title}
-                </h2>
-
-                <div style={{ backgroundColor: '#0f172a', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', margin: '12px 0' }}>
-                  <div>
-                    <span style={{ color: '#94a3b8', fontSize: '12px', display: 'block' }}>仕入価格</span>
-                    <span style={{ fontWeight: 'bold', fontSize: '14px' }}>
-                      ¥{item.ec_price?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ color: '#34d399', fontSize: '12px', display: 'block' }}>見込み利益</span>
-                    <span style={{ color: '#34d399', fontWeight: 'bold', fontSize: '16px' }}>
-                      +¥{item.estimated_profit?.toLocaleString() || 0}
-                    </span>
-                  </div>
-                </div>
-
-                {item.analysis_reason && (
-                  <p style={{ fontSize: '12px', color: '#cbd5e1', backgroundColor: '#334155', padding: '8px', borderRadius: '6px', margin: '0 0 12px 0' }}>
-                    💡 {item.analysis_reason}
-                  </p>
-                )}
-
-                {item.item_url && (
-                  <a
-                    href={item.item_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'block',
-                      textAlign: 'center',
-                      backgroundColor: '#10b981',
-                      color: 'white',
-                      textDecoration: 'none',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      fontWeight: 'bold',
-                      fontSize: '14px'
-                    }}
-                  >
-                    仕入れ先ページを開く ↗
-                  </a>
-                )}
+        <div className="grid gap-4">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4"
+            >
+              <div className="flex justify-between items-start gap-2">
+                <span className="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2.5 py-1 rounded-md border border-amber-500/20">
+                  【{item.rank}ランク】 スコア: {item.score}
+                </span>
+                <span className="text-xs text-slate-400">{item.category}</span>
               </div>
-            ))
-          ) : (
-            <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0' }}>
-              データがまだありません。
-            </p>
-          )}
+
+              <h2 className="text-lg font-bold text-slate-100">{item.title}</h2>
+
+              <div className="grid grid-cols-2 gap-4 bg-slate-950/50 p-3 rounded-lg border border-slate-800/50 text-sm">
+                <div>
+                  <span className="text-slate-400 text-xs block">仕入価格</span>
+                  <span className="font-semibold">
+                    ¥{item.purchase_price?.toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-xs block">見込み利益</span>
+                  <span className="font-bold text-emerald-400">
+                    +¥{item.estimated_profit?.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {item.memo && (
+                <p className="text-xs text-slate-300 bg-slate-800/40 p-2.5 rounded-lg border border-slate-700/30 flex items-center gap-1.5">
+                  💡 {item.memo}
+                </p>
+              )}
+
+              {item.url && (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm py-2.5 rounded-lg transition-colors"
+                >
+                  仕入れ先ページを開く ↗
+                </a>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </main>
