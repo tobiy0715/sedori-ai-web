@@ -8,12 +8,9 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def run_scraper():
-    # 自動収集用データ（テスト送信）
+    # 自動収集用データ（絶対に存在するitem_titleのみ）
     item_data = {
-        "item_title": "【クラウド自動収集】限定フィギュア",
-        "score": 92,
-        "rank": "S",
-        "url": "https://example.com"
+        "item_title": "【クラウド自動収集】限定フィギュア"
     }
 
     # Supabaseのテーブルへ挿入
