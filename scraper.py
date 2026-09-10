@@ -15,7 +15,6 @@ def run_scraper():
         "estimated_profit": 8000,
         "score": 92,
         "rank": "S",
-        "memo": "GitHub Actionsから自動定期実行されたデータです",
         "url": "https://example.com"
     }
 
