@@ -11,8 +11,8 @@ def run_scraper():
     # 自動収集用データ（テスト送信）
     item_data = {
         "item_title": "【クラウド自動収集】限定フィギュア",
-        "purchase_price": 4500,
-        "estimated_profit": 8000,
+        "price": 4500,
+        "profit": 8000,
         "score": 92,
         "rank": "S",
         "url": "https://example.com"
