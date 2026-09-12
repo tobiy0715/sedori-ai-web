@@ -1,8 +1,7 @@
 import os
 import re
 import json
-import urllib.parse
-import urllib.request
+import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 import google.generativeai as genai
@@ -82,19 +81,20 @@ def analyze_with_gemini(title):
 def run_scraper():
     delete_old_items()
 
-    keywords = "コラボ 限定 プレミアム 予約 抽選"
-    encoded_keywords = urllib.parse.quote(keywords)
-    raw_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
+    # requestsのparamsを使ってパラメータを安全に自動エンコード
+    url = "[https://news.google.com/rss/search](https://news.google.com/rss/search)"
+    params = {
+        "q": "コラボ 限定 プレミアム 予約 抽選",
+        "hl": "ja",
+        "gl": "JP",
+        "ceid": "JP:ja"
+    }
     
-    # 【超強力な安全装置】万が一URLに「[」や「]」、余分なクォーテーションが含まれても完全に削ぎ落とす
-    rss_url = re.sub(r'[\[\]\'"]', '', raw_url).strip()
-    print(f"アクセスURL: {rss_url}")
-    
-    req = urllib.request.Request(rss_url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req) as response:
-        xml_data = response.read()
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    response = requests.get(url, params=params, headers=headers)
+    print(f"レスポンスステータス: {response.status_code}")
 
-    root = ET.fromstring(xml_data)
+    root = ET.fromstring(response.content)
     items = root.findall('.//item')
 
     for item in items[:3]:
@@ -103,7 +103,7 @@ def run_scraper():
         ai_data = analyze_with_gemini(raw_title)
         clean_name = ai_data.get("item_title", "トレンド商品")
         
-        encoded_search = urllib.parse.quote(clean_name)
+        encoded_search = requests.utils.quote(clean_name)
         mercari_url = f"[https://jp.mercari.com/search?keyword=](https://jp.mercari.com/search?keyword=){encoded_search}"
         
         data = {
