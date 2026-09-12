@@ -26,7 +26,7 @@ export default function Home() {
     const { data } = await supabase
       .from('items')
       .select('*')
-      .order('id', { ascending: false })
+      .order('created_at', { ascending: false })
     if (data) setItems(data)
   }
 
