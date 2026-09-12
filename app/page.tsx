@@ -9,6 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 type Item = {
   id: number
+  created_at: string // ← これを追加！
   title: string
   category: string
   purchase_price: number
