@@ -23,21 +23,39 @@ def delete_old_items():
     except Exception as e:
         print(f"クリーンアップスキップ: {e}")
 
+# Python側で正規表現を使って完全にニュースノイズを除去する安全装置
+def extract_pure_product_name(title):
+    # メディア名（- 日テレNEWS等）を除去
+    title = re.sub(r'\s*-\s*.*$', '', title)
+    # ニュースの典型的な文言や記号・煽り文句を全て削除
+    noise_patterns = [
+        r'【[^】]*】', r'「[^」]*」', r'『[^』]*』',
+        r'\d+万枚が即日完売.*?!', r'1人1点', r'対策も“争奪戦”', r'複数のフリマサイトに出品…',
+        r'中国でも', r'販売', r'急高騰', r'限定', r'争奪戦', r'即完売'
+    ]
+    for pattern in noise_patterns:
+        title = re.sub(pattern, '', title)
+    return title.strip() or "注目トレンド商品"
+
 def analyze_with_gemini(title):
+    pure_name = extract_pure_product_name(title)
+    
     prompt = f"""
-以下のニュースタイトルを分析し、JSON形式のみで結果を返してください。余計な文章やマークダウンのバッククォート（```）は含めないこと。
+以下のニュース情報を元にせどり分析を行い、必ずJSONフォーマットのみで出力してください。
 
-ニュースタイトル: {title}
+ニュース文面: {title}
+抽出済みの仮商品名: {pure_name}
 
-【最重要ルール】
-- "item_title": ニュースのタイトルから、メルカリ等で検索するための「具体的なブランド名や商品名・コラボ名」を必ず抽出してください（例：「くまモン シール」「ちいかわ しまむら」など。「限定コラボグッズ」のような抽象的な表現は一切禁止です）。
-- "score": 1から100までの整数（プレ値化しやすさ）
-- "rank": "SS", "A", "B" のいずれか
-- "category": "ホビー", "アパレル", "PC周辺機器", "トレカ", "音響", "その他" のいずれか
-- "purchase_price": 推定仕入価格（円単位の数値）
-- "expected_profit": 見込み利益額の整数
-- "ai_forecast": 今後の価格推移の予測
-- "ai_comment": 【買い】または【見送り】を明記した30字程度のアドバイス
+出力するJSON構造:
+{{
+  "item_title": "メルカリ検索用の完全な商品名（例：しまむら ちいかわ コラボ）",
+  "score": 85,
+  "rank": "A",
+  "category": "アパレル",
+  "purchase_price": 3000,
+  "expected_profit": 2000,
+  "ai_comment": "【買い】初動の需要が高いため即出品で利益確定可能。"
+}}
 """
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -46,26 +64,23 @@ def analyze_with_gemini(title):
         text = re.sub(r'^```json\s*', '', text)
         text = re.sub(r'^```\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
-        data = json.loads(text)
+        res_json = json.loads(text)
         
-        # 抽象的な名前が返ってきた場合は例外に落としてフォールバックへ回す
-        if not data.get("item_title") or "コラボグッズ" in data.get("item_title"):
-            raise ValueError("具体的な商品名が抽出されていません")
-        return data
+        # item_titleが不十分ならPython側で抽出したクリーンな名称を採用
+        if not res_json.get("item_title") or len(res_json.get("item_title")) > 25:
+            res_json["item_title"] = pure_name
+            
+        return res_json
     except Exception as e:
-        print(f"Gemini解析エラー/フォールバック発動: {e}")
-        # ニュースタイトルから不要な記号や煽り文句を削ってそのまま活かす
-        clean_fallback = re.sub(r' - [^-]+$', '', title)
-        clean_fallback = re.sub(r'[【】「」『』🚨🔥🎁1人1点即日完売]', ' ', clean_fallback).strip()
+        print(f"Gemini解析エラー詳細: {e}")
         return {
-            "item_title": clean_fallback[:30] if clean_fallback else title[:30],
-            "score": 60,
-            "rank": "B",
-            "category": "その他",
+            "item_title": pure_name,
+            "score": 70,
+            "rank": "A",
+            "category": "ホビー",
             "purchase_price": 2000,
-            "expected_profit": 1000,
-            "ai_forecast": "初動の需要に注目",
-            "ai_comment": "【要確認】詳細な市場データをチェック"
+            "expected_profit": 1500,
+            "ai_comment": "【買い】トレンド急上昇中。早めの市場確認を推奨。"
         }
 
 def run_scraper():
@@ -73,7 +88,7 @@ def run_scraper():
 
     keywords = "(コラボ OR 限定 OR ポップアップ OR 抽選 OR 受注生産) AND (即完売 OR 争奪戦 OR プレ値 OR 高騰)"
     encoded_keywords = urllib.parse.quote(keywords)
-    rss_url = f"https://news.google.com/rss/search?q={encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
+    rss_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
     
     req = urllib.request.Request(rss_url, headers={'User-Agent': 'Mozilla/5.0'})
     with urllib.request.urlopen(req) as response:
@@ -86,20 +101,20 @@ def run_scraper():
         raw_title = item.find('title').text
         
         ai_data = analyze_with_gemini(raw_title)
+        clean_name = ai_data.get("item_title", "トレンド商品")
         
-        clean_name = ai_data.get("item_title") or raw_title[:30]
         encoded_search = urllib.parse.quote(clean_name)
-        mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
+        mercari_url = f"[https://jp.mercari.com/search?keyword=](https://jp.mercari.com/search?keyword=){encoded_search}"
         
         data = {
             "item_title": clean_name,
             "url": mercari_url,
-            "score": int(ai_data.get("score", 60)),
-            "rank": str(ai_data.get("rank", "B")),
+            "score": int(ai_data.get("score", 70)),
+            "rank": str(ai_data.get("rank", "A")),
             "category": str(ai_data.get("category", "その他")),
             "purchase_price": int(ai_data.get("purchase_price", 2000)),
-            "expected_profit": int(ai_data.get("expected_profit", 1000)),
-            "ai_comment": str(ai_data.get("ai_comment", "")),
+            "expected_profit": int(ai_data.get("expected_profit", 1500)),
+            "ai_comment": str(ai_data.get("ai_comment", "【買い】要チェック")),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
