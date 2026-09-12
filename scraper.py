@@ -5,7 +5,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
-from google import genai
+import google.generativeai as genai
 from supabase import create_client, Client
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -13,8 +13,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-# 新しいgoogle-genaiクライアントの初期化
-client = genai.Client(api_key=GEMINI_API_KEY)
+genai.configure(api_key=GEMINI_API_KEY)
 
 def clean_title(title):
     title = re.sub(r' - [^-]+$', '', title)
@@ -30,7 +29,6 @@ def delete_old_items():
         print(f"クリーンアップスキップ: {e}")
 
 def analyze_with_gemini(title):
-    # Geminiにせどり目線での分析を指示
     prompt = f"""
 以下のニュースタイトルを「せどり・転売市場」の視点から分析し、JSON形式のみで結果を返してください。余計な文章やマークダウンのバッククォート（```）は一切含めないでください。
 
@@ -45,12 +43,9 @@ def analyze_with_gemini(title):
 - "ai_comment": せどり・転売目線での鋭い分析コメント（30文字程度で簡潔に）
 """
     try:
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
         text = response.text.strip()
-        # 万が一バッククォートが含まれていた場合の対策
         text = re.sub(r'^```json\s*', '', text)
         text = re.sub(r'^```\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
@@ -80,12 +75,10 @@ def run_scraper():
     root = ET.fromstring(xml_data)
     items = root.findall('.//item')
 
-    # まずは動作確認を兼ねて上位3件を処理
     for item in items[:3]:
         raw_title = item.find('title').text
         cleaned = clean_title(raw_title)
         
-        # Geminiによる自動解析
         ai_data = analyze_with_gemini(raw_title)
         
         encoded_search = urllib.parse.quote(cleaned)
