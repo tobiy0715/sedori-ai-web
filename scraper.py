@@ -92,8 +92,7 @@ def run_scraper():
 
     for item in items[:5]:
         raw_title = item.find('title').text
-        # ニュースの元記事URLを取得
-        source_url = item.find('link').text if item.find('link') is not None else "https://news.google.com"
+        source_url = item.find('link').text if item.find('link'] is not None else "https://news.google.com"
         
         ai_data = analyze_with_gemini(raw_title)
         
@@ -101,7 +100,6 @@ def run_scraper():
         purchase_price = ai_data["purchase_price"]
         market_price = ai_data["market_price"]
         
-        # 利益計算
         platform_fee = int(market_price * 0.10)
         shipping_fee = 800
         net_profit = market_price - purchase_price - platform_fee - shipping_fee
@@ -122,25 +120,26 @@ def run_scraper():
 
         encoded_search = requests.utils.quote(clean_name)
         
-        # 複数モールの検索URL生成
         mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
         yahoo_url = f"https://auctions.yahoo.co.jp/search/search?p={encoded_search}"
         amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
         
         calc_details = f"売値:{market_price:,} - 仕入:{purchase_price:,} - 手数料:{platform_fee} - 送料:{shipping_fee}"
+        
+        # 文字化けしないようにMarkdownリンクではなくプレーンなテキストのインフォメーションにする
         ai_comment = f"【{judgment} / 利益率:{profit_margin}%】{ai_data['reason']} ({calc_details})"
 
-        # DB側にはマルチプラットフォームのリンクをJSONで保存、またはメインURLとしてソースを保持
-        # ここではフロント側で切り替えられるようにURL項目にメルカリを入れつつ、ソース情報をコメントや別カラムに持たせる
+        # メインのURLにはメルカリを置きつつ、AmazonやYahooのリンクはもしフロント側で対応していれば別だが、
+        # ここでは安全にコメント文字列を綺麗に整形しておく
         data = {
             "item_title": clean_name,
-            "url": mercari_url,  # 後ほどフロント側で複数ボタンにするため、まずはメルカリを基本に
+            "url": mercari_url,
             "score": score,
             "rank": rank,
             "category": str(ai_data["category"]),
             "purchase_price": purchase_price,
             "expected_profit": net_profit,
-            "ai_comment": f"{ai_comment} | 【リンク】[ソース元]({source_url}) / [Amazon]({amazon_url}) / [Yahoo!フリマ]({yahoo_url})"
+            "ai_comment": ai_comment
         }
         
         try:
