@@ -17,7 +17,10 @@ type Item = {
   score: number
   rank: string
   ai_comment: string
-  url: string
+  mercari_url: string
+  amazon_url: string
+  yahoo_url: string
+  source_url: string
 }
 
 function formatDate(dateString?: string) {
@@ -176,33 +179,47 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ボタン */}
-              {item.url && (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'center',
-                    backgroundColor: '#059669',
-                    color: '#ffffff',
-                    fontWeight: 'bold',
-                    fontSize: '13px',
-                    padding: '10px 0',
-                    borderRadius: '8px',
-                    textDecoration: 'none',
-                    marginTop: '4px'
-                  }}
-                >
-                  仕入れ先ページを開く ↗
-                </a>
-              )}
+              {/* 4つのリンクボタン（ソース元・メルカリ・Amazon・Yahoo!フリマ） */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                {item.source_url && (
+                  <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={buttonStyle('#475569')}>
+                    📰 ニュースソース ↗
+                  </a>
+                )}
+                {item.mercari_url && (
+                  <a href={item.mercari_url} target="_blank" rel="noopener noreferrer" style={buttonStyle('#059669')}>
+                    🛍️ メルカリ検索 ↗
+                  </a>
+                )}
+                {item.amazon_url && (
+                  <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" style={buttonStyle('#d97706')}>
+                    📦 Amazon検索 ↗
+                  </a>
+                )}
+                {item.yahoo_url && (
+                  <a href={item.yahoo_url} target="_blank" rel="noopener noreferrer" style={buttonStyle('#2563eb')}>
+                    🏷️ Yahoo!フリマ ↗
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>
       </div>
     </main>
   )
+}
+
+function buttonStyle(bgColor: string) {
+  return {
+    display: 'block',
+    textAlign: 'center' as const,
+    backgroundColor: bgColor,
+    color: '#ffffff',
+    fontWeight: 'bold' as const,
+    fontSize: '12px',
+    padding: '8px 0',
+    borderRadius: '6px',
+    textDecoration: 'none',
+  }
 }
