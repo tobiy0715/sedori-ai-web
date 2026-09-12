@@ -23,16 +23,13 @@ def delete_old_items():
         print(f"クリーンアップスキップ: {e}")
 
 def analyze_with_gemini(title):
-    # 安全なタイトル文字列の調整（長すぎる場合は切る）
-    clean_title_base = title[:40]
-    
     prompt = f"""
 以下のニュース情報を元に、せどり・転売の観点から市場価格と仕入価格（定価等）をリアルに推測してください。
 必ず以下のJSON形式「のみ」で出力し、前後にマークダウンや他の文章を一切含めないこと。
 
 {{
-  "item_title": "商品名（30文字以内）",
-  "category": "ホビー",
+  "item_title": "商品名（省略せず正確な名称）",
+  "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
   "purchase_price": 5000,
   "market_price": 8500,
   "reason": "トレンド理由を簡潔に"
@@ -45,36 +42,29 @@ def analyze_with_gemini(title):
         response = model.generate_content(prompt)
         text = response.text.strip()
         
-        # JSONブロックの抽出
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
             text = match.group(0)
             
         res_json = json.loads(text)
         
-        # 各値の型保証とバリデーション
         pur = int(res_json.get("purchase_price", 4000))
         mkt = int(res_json.get("market_price", 7000))
         if pur <= 0: pur = 4000
         if mkt <= pur: mkt = pur + 3000
-        
-        item_title = str(res_json.get("item_title", clean_title_base))
-        if len(item_title) > 35:
-            item_title = item_title[:35]
 
         return {
-            "item_title": item_title,
-            "category": str(res_json.get("category", "ホビー")),
+            "item_title": str(res_json.get("item_title", title)),
+            "category": str(res_json.get("category", "グッズ")),
             "purchase_price": pur,
             "market_price": mkt,
             "reason": str(res_json.get("reason", "需要拡大による相場上昇"))
         }
     except Exception as e:
-        print(f"Gemini解析・パースエラー: {e} -> 動的フォールバック適用")
-        # エラー時でも同じ値にせず、タイトルごとの文字数ハッシュ等を利用して個別の価格差をつける
+        print(f"Gemini解析エラー: {e}")
         dynamic_base = (len(title) * 300) % 8000 + 3000
         return {
-            "item_title": clean_title_base,
+            "item_title": title,
             "category": "グッズ",
             "purchase_price": dynamic_base,
             "market_price": dynamic_base + 4500,
@@ -102,6 +92,9 @@ def run_scraper():
 
     for item in items[:5]:
         raw_title = item.find('title').text
+        # ニュースの元記事URLを取得
+        source_url = item.find('link').text if item.find('link') is not None else "https://news.google.com"
+        
         ai_data = analyze_with_gemini(raw_title)
         
         clean_name = ai_data["item_title"]
@@ -128,25 +121,31 @@ def run_scraper():
             rank = "C"
 
         encoded_search = requests.utils.quote(clean_name)
+        
+        # 複数モールの検索URL生成
         mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
+        yahoo_url = f"https://auctions.yahoo.co.jp/search/search?p={encoded_search}"
+        amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
         
         calc_details = f"売値:{market_price:,} - 仕入:{purchase_price:,} - 手数料:{platform_fee} - 送料:{shipping_fee}"
         ai_comment = f"【{judgment} / 利益率:{profit_margin}%】{ai_data['reason']} ({calc_details})"
 
+        # DB側にはマルチプラットフォームのリンクをJSONで保存、またはメインURLとしてソースを保持
+        # ここではフロント側で切り替えられるようにURL項目にメルカリを入れつつ、ソース情報をコメントや別カラムに持たせる
         data = {
             "item_title": clean_name,
-            "url": mercari_url,
+            "url": mercari_url,  # 後ほどフロント側で複数ボタンにするため、まずはメルカリを基本に
             "score": score,
             "rank": rank,
             "category": str(ai_data["category"]),
             "purchase_price": purchase_price,
             "expected_profit": net_profit,
-            "ai_comment": ai_comment
+            "ai_comment": f"{ai_comment} | 【リンク】[ソース元]({source_url}) / [Amazon]({amazon_url}) / [Yahoo!フリマ]({yahoo_url})"
         }
         
         try:
             supabase.table("surging_items").insert(data).execute()
-            print(f"保存成功 [{judgment}]: {clean_name} (仕入:{purchase_price} / 利益:{net_profit}円)")
+            print(f"保存成功 [{judgment}]: {clean_name}")
         except Exception as db_err:
             print(f"DB保存エラー: {db_err}")
 
