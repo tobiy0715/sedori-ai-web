@@ -37,30 +37,36 @@ def analyze_with_gemini(title):
     pure_name = extract_pure_product_name(title)
     
     prompt = f"""
-以下のニュース情報を元に、せどり・転売の観点から市場価格を予測し、必ずJSONフォーマットのみで出力してください。
+以下のニュース情報を元に、プロのせどりバイヤーの視点で実際の市場価格と定価（仕入れ価格）をリアルに推測してください。
+必ず以下の形式のJSONのみを出力し、前後に他の文章やマークダウンを含めないこと。
+
+{{
+  "item_title": "商品名（型番やコラボ名含む）",
+  "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
+  "purchase_price": 定価や現実的な仕入原価の数値（例: 15000）,
+  "market_price": "メルカリ等のフリマ実売価格の数値（例: 24000）",
+  "reason": "なぜその価格で売れるかの理由を1文で"
+}}
 
 ニュース文面: {title}
-仮商品名: {pure_name}
-
-出力するJSON構造（余計なテキストは含めないこと）:
-{{
-  "item_title": "正確な商品名（型番やコラボ名含む）",
-  "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
-  "purchase_price": 3000,
-  "market_price": 6000,
-  "ai_comment": "【理由】初回限定の予約完売品のため、フリマ初動で高値安定が予想される。"
-}}
 """
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         text = response.text.strip()
-        text = re.sub(r'^```json\s*', '', text)
-        text = re.sub(r'^```\s*', '', text)
-        text = re.sub(r'\s*```$', '', text)
+        
+        # 確実にJSONブロックだけを抜き出す
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            text = match.group(0)
+            
         res_json = json.loads(text)
         
-        if not res_json.get("item_title") or len(res_json.get("item_title")) > 25:
+        # 型の安全確保
+        res_json["purchase_price"] = int(res_json.get("purchase_price", 5000))
+        res_json["market_price"] = int(res_json.get("market_price", 8000))
+        
+        if not res_json.get("item_title") or len(res_json.get("item_title")) > 30:
             res_json["item_title"] = pure_name
             
         return res_json
@@ -69,9 +75,9 @@ def analyze_with_gemini(title):
         return {
             "item_title": pure_name,
             "category": "その他",
-            "purchase_price": 3000,
-            "market_price": 4500,
-            "ai_comment": "【注意】パースエラーのためデフォルト値を設定。"
+            "purchase_price": 5000,
+            "market_price": 8000,
+            "reason": "AI解析の補正値を使用"
         }
 
 def run_scraper():
@@ -99,32 +105,37 @@ def run_scraper():
         ai_data = analyze_with_gemini(raw_title)
         
         clean_name = ai_data.get("item_title", "トレンド商品")
-        purchase_price = int(ai_data.get("purchase_price", 3000))
-        market_price = int(ai_data.get("market_price", 5000))
+        purchase_price = ai_data.get("purchase_price", 5000)
+        market_price = ai_data.get("market_price", 8000)
         
-        # --- Python側で正確な利益計算 ---
-        platform_fee = int(market_price * 0.10)  # メルカリ販売手数料10%
-        shipping_fee = 750                       # 平均的な送料・梱包費（一律750円仮置き）
+        # --- 厳格な利益計算ロジック ---
+        platform_fee = int(market_price * 0.10)  # 販売手数料10%
+        shipping_fee = 800                       # 送料・梱包費
         net_profit = market_price - purchase_price - platform_fee - shipping_fee
         profit_margin = round((net_profit / market_price) * 100, 1) if market_price > 0 else 0
         
-        # 判定ロジック
-        if profit_margin >= 25:
+        # 判定
+        if profit_margin >= 20 and net_profit >= 2000:
             judgment = "即仕入れ"
             score = 90
             rank = "S"
-        elif profit_margin >= 15:
+        elif profit_margin >= 10:
             judgment = "要検討"
-            score = 75
+            score = 70
             rank = "A"
         else:
             judgment = "見送り"
-            score = 40
+            score = 30
             rank = "C"
 
         encoded_search = requests.utils.quote(clean_name)
-        mercari_url = f"[https://jp.mercari.com/search?keyword=](https://jp.mercari.com/search?keyword=){encoded_search}"
+        mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
         
+        # 内訳がひと目でわかるコメントを作成
+        calc_details = f"売値:{market_price:,} - 仕入:{purchase_price:,} - 手数料:{platform_fee} - 送料:{shipping_fee}"
+        comment_text = ai_data.get('reason', '')
+        ai_comment = f"【{judgment} / 利益率:{profit_margin}%】{comment_text} ({calc_details})"
+
         data = {
             "item_title": clean_name,
             "url": mercari_url,
@@ -133,12 +144,12 @@ def run_scraper():
             "category": str(ai_data.get("category", "その他")),
             "purchase_price": purchase_price,
             "expected_profit": net_profit,
-            "ai_comment": f"【{judgment} / 利益率:{profit_margin}%】{ai_data.get('ai_comment', '')}"
+            "ai_comment": ai_comment
         }
         
         try:
             supabase.table("surging_items").insert(data).execute()
-            print(f"保存成功 [{judgment}]: {clean_name} (利益: {net_profit}円 / 利益率: {profit_margin}%)")
+            print(f"保存成功 [{judgment}]: {clean_name} (仕入:{purchase_price} / 利益:{net_profit}円 / 利益率:{profit_margin}%)")
         except Exception as db_err:
             print(f"DB保存エラー: {db_err}")
 
