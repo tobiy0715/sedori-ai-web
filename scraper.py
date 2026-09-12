@@ -84,10 +84,8 @@ def run_scraper():
 
     keywords = "コラボ 限定 プレミアム 予約 抽選"
     encoded_keywords = urllib.parse.quote(keywords)
-    raw_rss_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
+    rss_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
     
-    # 万が一角括弧が含まれていても強制的に除去する安全装置
-    rss_url = raw_rss_url.strip("[]'\"")
     print(f"アクセスURL: {rss_url}")
     
     req = urllib.request.Request(rss_url, headers={'User-Agent': 'Mozilla/5.0'})
