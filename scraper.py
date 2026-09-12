@@ -81,7 +81,6 @@ def analyze_with_gemini(title):
 def run_scraper():
     delete_old_items()
 
-    # requestsのparamsを使ってパラメータを安全に自動エンコード
     url = "[https://news.google.com/rss/search](https://news.google.com/rss/search)"
     params = {
         "q": "コラボ 限定 プレミアム 予約 抽選",
