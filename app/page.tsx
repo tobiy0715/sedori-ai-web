@@ -1,232 +1,100 @@
-'use client'
+'use client';
+import { useEffect, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-type Item = {
-  id: number
-  created_at?: string
-  item_title: string
-  category: string
-  purchase_price: number
-  expected_profit: number
-  score: number
-  rank: string
-  ai_comment: string
-  url?: string
-  mercari_url?: string
-  amazon_url?: string
-  yahoo_url?: string
-  source_url?: string
-}
-
-function formatDate(dateString?: string) {
-  if (!dateString) return '日時未設定'
-  try {
-    const d = new Date(dateString)
-    if (isNaN(d.getTime())) return '日時エラー'
-    
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const hours = String(d.getHours()).padStart(2, '0')
-    const minutes = String(d.getMinutes()).padStart(2, '0')
-    
-    return `${month}/${day} ${hours}:${minutes}`
-  } catch (e) {
-    return '日時エラー'
-  }
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default function Home() {
-  const [items, setItems] = useState<Item[]>([])
-
-  const fetchItems = async () => {
-    const { data, error } = await supabase
-      .from('surging_items')
-      .select('*')
-      .order('id', { ascending: false })
-      
-    if (data) {
-      setItems(data)
-    }
-  }
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchItems()
-
-    const channel = supabase
-      .channel('realtime-surging_items')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'surging_items' },
-        () => {
-          fetchItems()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
+    async function fetchItems() {
+      const { data, error } = await supabase
+        .from('surging_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        setItems(data);
+      }
+      setLoading(false);
     }
-  }, [])
+    fetchItems();
+  }, []);
+
+  // 判定に応じて文字色やスタイルを切り替える関数
+  const getJudgmentStyle = (comment: string) => {
+    if (comment.includes("買い") || comment.includes("即仕入れ")) {
+      return "text-yellow-400 font-bold"; // 買い：黄色ボールド
+    } else if (comment.includes("見送り")) {
+      return "text-red-500 font-bold"; // 見送り：赤文字
+    } else if (comment.includes("微妙") || comment.includes("要検討")) {
+      return "text-cyan-400 font-bold"; // 微妙：水色
+    }
+    return "text-slate-300";
+  };
 
   return (
-    <main 
-      style={{ 
-        minHeight: '100vh', 
-        backgroundColor: '#0f172a', 
-        color: '#f8fafc',
-        padding: '16px',
-        fontFamily: 'sans-serif'
-      }}
-    >
-      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-        <header style={{ borderBottom: '1px solid #334155', paddingBottom: '16px', marginBottom: '20px' }}>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🔥 せどりAI 利益商品ダッシュボード
-          </h1>
-          <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>
-            自動収集・AI解析されたリアルタイムトレンド一覧（自動更新有効）
-          </p>
-        </header>
+    <main className="min-h-screen bg-slate-950 text-white p-4">
+      <div className="max-w-xl mx-auto">
+        <h1 className="text-xl font-bold mb-1">🔥 せどりAI 利益商品ダッシュボード</h1>
+        <p className="text-xs text-slate-400 mb-4">自動収集・AI解析されたリアルタイムトレンド一覧（自動更新有効）</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {items.map((item) => {
-            const encodedTitle = encodeURIComponent(item.item_title || '')
-            const mercariLink = item.mercari_url || item.url || `https://jp.mercari.com/search?keyword=${encodedTitle}`
-            const amazonLink = item.amazon_url || `https://www.amazon.co.jp/s?k=${encodedTitle}`
-            const yahooLink = item.yahoo_url || `https://paypayfleamarket.yahoo.co.jp/search?keyword=${encodedTitle}`
-            const sourceLink = item.source_url || (item.url && !item.url.includes('mercari') ? item.url : null)
-
-            return (
-              <div
-                key={item.id}
-                style={{
-                  backgroundColor: '#1e293b',
-                  border: '1px solid #334155',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}
-              >
-                {/* バッジ & 日時・カテゴリ */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                  <span style={{
-                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-                    color: '#fbbf24',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    padding: '4px 8px',
-                    borderRadius: '6px'
-                  }}>
+        {loading ? (
+          <p className="text-center text-slate-400 py-10">読み込み中...</p>
+        ) : (
+          <div className="space-y-4">
+            {items.map((item) => (
+              <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="bg-amber-500/20 text-amber-300 text-xs px-2 py-1 rounded font-bold">
                     【{item.rank}ランク】 スコア: {item.score}
                   </span>
-
-                  <div style={{ display: 'flex', gap: '6px', fontSize: '11px' }}>
-                    <span style={{ backgroundColor: '#0f172a', color: '#cbd5e1', padding: '3px 8px', borderRadius: '4px', border: '1px solid #334155' }}>
-                      🕒 {formatDate(item.created_at)}
-                    </span>
-                    <span style={{ backgroundColor: '#0f172a', color: '#cbd5e1', padding: '3px 8px', borderRadius: '4px', border: '1px solid #334155' }}>
-                      {item.category || 'その他'}
-                    </span>
+                  <div className="text-xs text-slate-400 space-x-2">
+                    <span>🕒 {new Date(item.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="bg-slate-800 px-2 py-0.5 rounded">{item.category}</span>
                   </div>
                 </div>
 
-                {/* タイトル */}
-                <h2 style={{ fontSize: '16px', fontWeight: 'bold', color: '#f1f5f9', lineHeight: '1.4', margin: 0 }}>
-                  {item.item_title}
-                </h2>
+                <h2 className="text-lg font-bold mb-3">{item.item_title}</h2>
 
-                {/* 価格（2列レイアウト） */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px',
-                  backgroundColor: '#0f172a',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: '1px solid #334155'
-                }}>
+                <div className="grid grid-cols-2 gap-2 bg-slate-950/50 p-3 rounded-lg mb-3">
                   <div>
-                    <span style={{ color: '#94a3b8', fontSize: '11px', display: 'block', marginBottom: '2px' }}>仕入価格</span>
-                    <span style={{ fontWeight: 'bold', fontSize: '15px', color: '#f8fafc' }}>
-                      ¥{item.purchase_price?.toLocaleString() || 0}
-                    </span>
+                    <div className="text-xs text-slate-400">仕入価格</div>
+                    <div className="text-lg font-bold">¥{item.purchase_price?.toLocaleString()}</div>
                   </div>
                   <div>
-                    <span style={{ color: '#94a3b8', fontSize: '11px', display: 'block', marginBottom: '2px' }}>見込み利益</span>
-                    <span style={{ fontWeight: 'bold', fontSize: '15px', color: '#34d399' }}>
-                      +¥{item.expected_profit?.toLocaleString() || 0}
-                    </span>
+                    <div className="text-xs text-slate-400">見込み利益</div>
+                    <div className="text-lg font-bold text-emerald-400">+¥{item.expected_profit?.toLocaleString()}</div>
                   </div>
                 </div>
 
-                {/* AIコメント */}
-                {item.ai_comment && (
-                  <div style={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    color: '#cbd5e1',
-                    display: 'flex',
-                    gap: '8px',
-                    alignItems: 'flex-start'
-                  }}>
-                    <span>💡</span>
-                    <span style={{ lineHeight: '1.4' }}>{item.ai_comment}</span>
-                  </div>
-                )}
+                {/* AIコメントに動的スタイルを適用 */}
+                <p className={`text-sm mb-4 leading-relaxed ${getJudgmentStyle(item.ai_comment)}`}>
+                  💡 {item.ai_comment}
+                </p>
 
-                {/* 4つのリンクボタン（ニュース・メルカリ・Amazon・Yahoo!フリマ） */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
-                  {sourceLink ? (
-                    <a href={sourceLink} target="_blank" rel="noopener noreferrer" style={buttonStyle('#475569')}>
-                      📰 ニュースソース ↗
-                    </a>
-                  ) : (
-                    <a href={`https://www.google.com/search?q=${encodedTitle}`} target="_blank" rel="noopener noreferrer" style={buttonStyle('#475569')}>
-                      🔍 ニュース検索 ↗
-                    </a>
-                  )}
-                  <a href={mercariLink} target="_blank" rel="noopener noreferrer" style={buttonStyle('#059669')}>
-                    🛍️ メルカリ検索 ↗
+                <div className="grid grid-cols-2 gap-2">
+                  <a href={item.source_url || item.url} target="_blank" rel="noopener noreferrer" className="bg-slate-700 hover:bg-slate-600 text-center text-xs py-2 px-3 rounded font-bold flex items-center justify-center space-x-1">
+                    <span>📰 ニュースソース ↗</span>
                   </a>
-                  <a href={amazonLink} target="_blank" rel="noopener noreferrer" style={buttonStyle('#d97706')}>
-                    📦 Amazon検索 ↗
+                  <a href={item.mercari_url} target="_blank" rel="noopener noreferrer" className="bg-emerald-600 hover:bg-emerald-500 text-center text-xs py-2 px-3 rounded font-bold flex items-center justify-center space-x-1">
+                    <span>🛍️ メルカリ検索 ↗</span>
                   </a>
-                  <a href={yahooLink} target="_blank" rel="noopener noreferrer" style={buttonStyle('#2563eb')}>
-                    🏷️ Yahoo!フリマ ↗
+                  <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" className="bg-amber-600 hover:bg-amber-500 text-center text-xs py-2 px-3 rounded font-bold flex items-center justify-center space-x-1">
+                    <span>📦 Amazon検索 ↗</span>
+                  </a>
+                  <a href={item.yahoo_url} target="_blank" rel="noopener noreferrer" className="bg-blue-600 hover:bg-blue-500 text-center text-xs py-2 px-3 rounded font-bold flex items-center justify-center space-x-1">
+                    <span>🟡 Yahoo!フリマ ↗</span>
                   </a>
                 </div>
               </div>
-            )
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </main>
-  )
-}
-
-function buttonStyle(bgColor: string) {
-  return {
-    display: 'block',
-    textAlign: 'center' as const,
-    backgroundColor: bgColor,
-    color: '#ffffff',
-    fontWeight: 'bold' as const,
-    fontSize: '12px',
-    padding: '8px 0',
-    borderRadius: '6px',
-    textDecoration: 'none',
-  }
+  );
 }
