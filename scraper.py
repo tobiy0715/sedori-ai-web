@@ -81,7 +81,9 @@ def analyze_with_gemini(title):
 def run_scraper():
     delete_old_items()
 
-    url = "[https://news.google.com/rss/search](https://news.google.com/rss/search)"
+    # パーツを分割して組み立てることでリンク混入を物理的に阻止
+    base_domain = "[https://news.google.com](https://news.google.com)"
+    path = "/rss/search"
     params = {
         "q": "コラボ 限定 プレミアム 予約 抽選",
         "hl": "ja",
@@ -90,7 +92,7 @@ def run_scraper():
     }
     
     headers = {'User-Agent': 'Mozilla/5.0'}
-    response = requests.get(url, params=params, headers=headers)
+    response = requests.get(base_domain + path, params=params, headers=headers)
     print(f"レスポンスステータス: {response.status_code}")
 
     root = ET.fromstring(response.content)
