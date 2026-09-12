@@ -25,39 +25,50 @@ def delete_old_items():
 
 def analyze_with_gemini(title):
     prompt = f"""
-以下のニュースタイトルを「せどり・転売市場」の視点から分析し、JSON形式のみで結果を返してください。余計な文章やマークダウンのバッククォート（```）は一切含めないでください。
+以下のニュースタイトルをせどり・転売市場の視点から分析し、指定のJSONフォーマットで回答してください。
 
 ニュースタイトル: {title}
 
-出力するJSONのキー:
-- "item_title": ニュースの見出しや装飾（「【急高騰】」や「- 日テレNEWS」など）を完全に排除し、フリマで検索しやすい純粋な「商品名・コラボ名」だけを抽出（例：「しまむら × ちいかわ コラボグッズ」）
-- "score": 1から100までの整数（熱狂度・プレ値化しやすさ）
-- "rank": "SS", "A", "B" のいずれか
-- "category": "ホビー", "アパレル", "PC周辺機器", "トレカ", "音響", または "その他" のいずれか
-- "purchase_price": 想定される定価や仕入価格の数値（円単位の整数。不明なら0）
-- "expected_profit": 見込み利益額の整数（不明なら0）
-- "ai_forecast": 今後の価格推移や需要の予測（簡潔に）
-- "ai_comment": 「買い」または「見送り」を明記した、相棒からの鋭い一言アドバイス（30〜40文字程度）
+期待するJSONフォーマット:
+{{
+  "item_title": "ニュースの雑多な見出し（【急高騰】やメディア名など）を排除した、メルカリ等で検索しやすい純粋な商品名・コラボ名",
+  "score": 50,
+  "rank": "B",
+  "category": "ホビー",
+  "purchase_price": 2000,
+  "expected_profit": 1000,
+  "ai_forecast": "初動高騰。再販リスクあり",
+  "ai_comment": "【買い】または【見送り】を含めた30字程度のアドバイス"
+}}
+※rankは"SS","A","B"のいずれか。
+※categoryは"ホビー","アパレル","PC周辺機器","トレカ","音響","その他"のいずれか。
 """
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # GeminiにJSON出力を強制する設定
+        generation_config = {
+            "response_mime_type": "application/json",
+            "temperature": 0.2,
+        }
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash',
+            generation_config=generation_config
+        )
         response = model.generate_content(prompt)
-        text = response.text.strip()
-        text = re.sub(r'^```json\s*', '', text)
-        text = re.sub(r'^```\s*', '', text)
-        text = re.sub(r'\s*```$', '', text)
-        return json.loads(text)
+        return json.loads(response.text.strip())
     except Exception as e:
         print(f"Gemini解析エラー: {e}")
+        # エラー時も元のタイトルから最低限のノイズを除去してフォールバック
+        clean_fallback = re.sub(r' - [^-]+$', '', title)
+        clean_fallback = re.sub(r'[【】「」『』🚨🔥🎁]', ' ', clean_fallback).strip()
         return {
-            "item_title": "トレンド商品",
+            "item_title": clean_fallback[:30],
             "score": 50,
             "rank": "B",
             "category": "その他",
             "purchase_price": 0,
             "expected_profit": 0,
-            "ai_forecast": "市場の動向を要確認。",
-            "ai_comment": "【見送り】情報が不足しています。"
+            "ai_forecast": "要市場確認",
+            "ai_comment": "【要確認】市場データを取得中"
         }
 
 def run_scraper():
@@ -77,15 +88,15 @@ def run_scraper():
     for item in items[:3]:
         raw_title = item.find('title').text
         
-        # Geminiに商品名クレンジングと分析を同時に依頼
+        # Geminiでノイズ除去＆相棒分析を同時実行
         ai_data = analyze_with_gemini(raw_title)
         
-        clean_name = ai_data.get("item_title", "限定アイテム")
+        clean_name = ai_data.get("item_title") or "注目トレンド商品"
         encoded_search = urllib.parse.quote(clean_name)
         mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
         
         data = {
-            "item_title": clean_name,  # 綺麗な商品名だけを保存
+            "item_title": clean_name,
             "url": mercari_url,
             "score": ai_data.get("score", 50),
             "rank": ai_data.get("rank", "B"),
