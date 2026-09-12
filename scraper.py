@@ -93,7 +93,7 @@ def run_scraper():
             "purchase_price": ai_data.get("purchase_price", 0),
             "expected_profit": ai_data.get("expected_profit", 0),
             "ai_comment": ai_data.get("ai_comment", ""),
-            "created_at": datetime.now(timezone.utc).isoformat()  # ← 日時データを追加
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
         
         supabase.table("surging_items").insert(data).execute()
@@ -101,3 +101,4 @@ def run_scraper():
 
 if __name__ == "__main__":
     run_scraper()
+
