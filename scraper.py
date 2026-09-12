@@ -23,38 +23,52 @@ def delete_old_items():
         print(f"クリーンアップスキップ: {e}")
 
 def fetch_yahoo_trending_keywords():
-    """Yahoo!フリマから検索急上昇ワードを取得"""
+    """Yahoo!フリマから検索急上昇ワードを取得（強力フォールバック付き）"""
     url = "https://paypayfleamarket.yahoo.co.jp/"
     headers = {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        "Accept-Language": "ja-JP,ja;q=0.9"
     }
     keywords = []
     try:
         res = requests.get(url, headers=headers, timeout=10)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, 'html.parser')
-            # ページ内の主要キーワードから急上昇ワード候補を集計
-            tags = soup.find_all(['a', 'span', 'p'])
-            for tag in tags:
-                text = tag.text.strip()
-                if text and 2 <= len(text) <= 25:
-                    if any(k in text for k in ["ちいかわ", "カード", "一番くじ", "コラボ", "マスコット", "限定", "フィギュア", "ぬいぐるみ", "AIR MAX"]):
-                        keywords.append(text)
+            elements = soup.find_all(['a', 'span', 'p', 'div'])
+            for el in elements:
+                text = el.text.strip()
+                if text and 3 <= len(text) <= 30:
+                    if not any(ignore in text for ignore in ["ログイン", "ヘルプ", "利用規約", "カテゴリ", "出品", "マイページ", "検索", "利用規約", "プライバシー"]):
+                        if any(k in text for k in ["ちいかわ", "一番くじ", "限定", "マスコット", "フィギュア", "カード", "ポケモン", "コラボ", "ぬいぐるみ"]):
+                            keywords.append(text)
     except Exception as e:
         print(f"Yahoo急上昇取得エラー: {e}")
     
-    # 取得失敗時のフォールバック（最新のフリマ急上昇リアルデータ）
-    if not keywords:
-        keywords = [
-            "りんりんおかおマスコット ちいかわ",
-            "こんぶ ちいかわ",
-            "ポケモンカード MEGA 30th",
-            "ONE PIECE Air Max Plus",
-            "奥田民生 OCEANUS"
-        ]
-    
-    # 重複排除の上、上位5件を返す
     unique_kw = list(dict.fromkeys(keywords))
+    
+    # スクレイピングで取れなかった場合はGeminiでフリマトレンドを補正・生成
+    if not unique_kw:
+        print("Yahoo!フリマ直接取得が空のため、AIトレンド補正を作動させます")
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            prompt = """
+現在、日本のフリマアプリ（Yahoo!フリマやメルカリ）で【検索急上昇中】または【SOLD OUT（売り切れ）連発中】の注目のトレンド商品・キーワードを5つ提案してください。
+例: ちいかわ りんりんおかおマスコット, ポケモンカード 最新パック, 一番くじ フィギュア
+カンマ区切りでキーワードのみを出力してください。余計な説明は一切不要です。
+"""
+            res = model.generate_content(prompt)
+            ai_keywords = [k.strip() for k in res.text.split(",") if k.strip()]
+            unique_kw = ai_keywords
+        except Exception as e:
+            print(f"AIトレンド生成エラー: {e}")
+            unique_kw = [
+                "ちいかわ りんりんおかおマスコット",
+                "ポケモンカード MEGA 30th",
+                "ONE PIECE フィギュア 限定",
+                "一番くじ ラストワン賞",
+                "サンリオ マスコット"
+            ]
+
     return unique_kw[:5]
 
 def analyze_trending_item_with_gemini(keyword):
