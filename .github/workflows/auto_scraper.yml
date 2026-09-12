@@ -19,7 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests google-generativeai supabase
+          pip install -r requirements.txt
 
       - name: Run Scraper
         env:
