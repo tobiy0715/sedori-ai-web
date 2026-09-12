@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 type Item = {
   id: number
-  created_at: string // ← これを追加！
+  created_at: string
   title: string
   category: string
   purchase_price: number
@@ -73,7 +73,22 @@ export default function Home() {
                 <span className="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2.5 py-1 rounded-md border border-amber-500/20">
                   【{item.rank}ランク】 スコア: {item.score}
                 </span>
-                <span className="text-xs text-slate-400">{item.category}</span>
+                <div className="flex items-center gap-2 text-right">
+                  {item.created_at && (
+                    <span className="text-xs text-slate-400">
+                      {new Date(item.created_at).toLocaleString('ja-JP', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}{' '}
+                      取得
+                    </span>
+                  )}
+                  <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                    {item.category}
+                  </span>
+                </div>
               </div>
 
               <h2 className="text-lg font-bold text-slate-100">{item.title}</h2>
