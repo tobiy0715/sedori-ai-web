@@ -23,69 +23,45 @@ def delete_old_items():
         print(f"クリーンアップスキップ: {e}")
 
 def fetch_yahoo_trending_keywords():
-    """Yahoo!フリマから検索急上昇ワードを取得（強力フォールバック付き）"""
-    url = "https://paypayfleamarket.yahoo.co.jp/"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "Accept-Language": "ja-JP,ja;q=0.9"
-    }
-    keywords = []
+    """Yahoo!フリマのトレンドワードを確実に取得（AI補正メイン）"""
+    print("AIトレンドジェネレータを作動させます")
     try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            elements = soup.find_all(['a', 'span', 'p', 'div'])
-            for el in elements:
-                text = el.text.strip()
-                if text and 3 <= len(text) <= 30:
-                    if not any(ignore in text for ignore in ["ログイン", "ヘルプ", "利用規約", "カテゴリ", "出品", "マイページ", "検索", "利用規約", "プライバシー"]):
-                        if any(k in text for k in ["ちいかわ", "一番くじ", "限定", "マスコット", "フィギュア", "カード", "ポケモン", "コラボ", "ぬいぐるみ"]):
-                            keywords.append(text)
-    except Exception as e:
-        print(f"Yahoo急上昇取得エラー: {e}")
-    
-    unique_kw = list(dict.fromkeys(keywords))
-    
-    # スクレイピングで取れなかった場合はGeminiでフリマトレンドを補正・生成
-    if not unique_kw:
-        print("Yahoo!フリマ直接取得が空のため、AIトレンド補正を作動させます")
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            prompt = """
-現在、日本のフリマアプリ（Yahoo!フリマやメルカリ）で【検索急上昇中】または【SOLD OUT（売り切れ）連発中】の注目のトレンド商品・キーワードを5つ提案してください。
-例: ちいかわ りんりんおかおマスコット, ポケモンカード 最新パック, 一番くじ フィギュア
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        prompt = """
+現在、Yahoo!フリマで【検索急上昇中】または【売り切れ連発中】の注目のトレンド商品・具体的なキャラクター・型番名を5つ提案してください。
+例: ちいかわ りんりんおかおマスコット, ポケモンカード メガブースター, ONE PIECE ギア5 フィギュア, 一番くじ ラストワン賞, サンリオ シークレットマスコット
 カンマ区切りでキーワードのみを出力してください。余計な説明は一切不要です。
 """
-            res = model.generate_content(prompt)
-            ai_keywords = [k.strip() for k in res.text.split(",") if k.strip()]
-            unique_kw = ai_keywords
-        except Exception as e:
-            print(f"AIトレンド生成エラー: {e}")
-            unique_kw = [
-                "ちいかわ りんりんおかおマスコット",
-                "ポケモンカード MEGA 30th",
-                "ONE PIECE フィギュア 限定",
-                "一番くじ ラストワン賞",
-                "サンリオ マスコット"
-            ]
-
-    return unique_kw[:5]
+        res = model.generate_content(prompt)
+        ai_keywords = [k.strip() for k in res.text.split(",") if k.strip()]
+        if ai_keywords:
+            return ai_keywords[:5]
+    except Exception as e:
+        print(f"AIトレンド生成エラー: {e}")
+    
+    return [
+        "ちいかわ りんりんおかおマスコット",
+        "ポケモンカード MEGA 30th",
+        "ONE PIECE フィギュア 限定",
+        "一番くじ ラストワン賞",
+        "サンリオ マスコット"
+    ]
 
 def analyze_trending_item_with_gemini(keyword):
-    """急上昇ワードを元にメルカリ売り切れ相場と定価・利益額を推測"""
+    """急上昇ワードを元にYahoo!フリマでの相場と定価・利益額を推測"""
     prompt = f"""
 あなたはプロのせどり・転売リサーチAIです。
-現在フリマアプリで検索急上昇中のトレンドワード「{keyword}」について、
-メルカリで『売り切れ（SOLD OUT）・新しい順』で高値取引されている具体的な商品情報を生成してください。
+現在Yahoo!フリマで検索急上昇中のトレンドワード「{keyword}」について、
+Yahoo!フリマで高値取引されている具体的な商品情報を生成してください。
 
 必ず以下のJSON形式「のみ」で出力し、前後にマークダウンや他の文章を一切含めないこと。
 
 {{
-  "item_title": "メルカリ・フリマでそのまま検索できる正確な商品名・型番",
+  "item_title": "Yahoo!フリマでそのまま検索できる正確な商品名・型番",
   "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
   "purchase_price": 3000,
   "market_price": 6500,
-  "reason": "なぜ今メルカリでSOLD連発・急上昇しているのか（需要理由）"
+  "reason": "なぜ今Yahoo!フリマで人気・急上昇しているのか（需要理由）"
 }}
 """
     try:
@@ -109,7 +85,7 @@ def analyze_trending_item_with_gemini(keyword):
             "category": str(res_json.get("category", "グッズ")),
             "purchase_price": pur,
             "market_price": mkt,
-            "reason": str(res_json.get("reason", "フリマ検索急上昇＆SOLD連発中"))
+            "reason": str(res_json.get("reason", "Yahoo!フリマ検索急上昇中"))
         }
     except Exception as e:
         print(f"Gemini解析エラー: {e}")
@@ -118,13 +94,12 @@ def analyze_trending_item_with_gemini(keyword):
             "category": "グッズ",
             "purchase_price": 3000,
             "market_price": 6500,
-            "reason": "フリマ検索急上昇ワードからの自動抽出"
+            "reason": "Yahoo!フリマ検索急上昇ワードからの自動抽出"
         }
 
 def run_scraper():
     delete_old_items()
 
-    # 1. Yahoo!フリマの急上昇ワードを取得
     trending_keywords = fetch_yahoo_trending_keywords()
     print(f"取得した急上昇ワード: {trending_keywords}")
 
@@ -155,9 +130,9 @@ def run_scraper():
 
         encoded_search = requests.utils.quote(clean_name)
         
-        # メルカリ：「売り切れ（status=sold_out）」「新しい順（sort=created_time&order=desc）」指定URL
-        mercari_sold_url = f"https://jp.mercari.com/search?keyword={encoded_search}&status=sold_out&sort=created_time&order=desc"
-        yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search?keyword={encoded_search}"
+        # Yahoo!フリマの検索URL（販売中・売り切れ問わず確実に表示できる基本URL）
+        yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search/{encoded_search}"
+        mercari_sold_url = f"https://jp.mercari.com/search?keyword={encoded_search}&status=sold_out"
         amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
         
         calc_details = f"売値:{market_price:,} - 仕入:{purchase_price:,} - 手数料:{platform_fee} - 送料:{shipping_fee}"
@@ -165,7 +140,7 @@ def run_scraper():
 
         data = {
             "item_title": clean_name,
-            "url": mercari_sold_url,
+            "url": yahoo_url,  # メインリンクをYahoo!フリマに変更
             "mercari_url": mercari_sold_url,
             "amazon_url": amazon_url,
             "yahoo_url": yahoo_url,
