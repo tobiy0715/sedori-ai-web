@@ -24,7 +24,6 @@ def delete_old_items():
         print(f"クリーンアップスキップ: {e}")
 
 def fetch_yahoo_trending_keywords():
-    """Yahoo!フリマ・メルカリの最新トレンドワードを20件動的に生成"""
     print("AIトレンドジェネレータを作動させます（20件取得）")
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -57,15 +56,15 @@ def fetch_yahoo_trending_keywords():
     return default_kws[:20]
 
 def analyze_trending_item_with_gemini(keyword):
-    """キーワードからリアルな定価・市場相場・ニュースソースの検索キーワードを生成"""
     prompt = f"""
 あなたはプロのせどり・転売リサーチAIです。
-フリマアプリのトレンドワード「{keyword}」について、実際の市場相場・リアルな仕入れ価格と売り切れ相場（売値）、さらにこの商品に関するニュースや公式情報を探すための検索クエリを生成してください。
+フリマアプリのトレンドワード「{keyword}」について、実際の市場相場・リアルな仕入れ価格と売り切れ相場（売値）、ニュース検索クエリ、そして【なぜこの商品が今狙い目なのか】の具体的な理由を分かりやすく解説した文章を生成してください。
 
 【出力条件】
 - purchase_price: 500円〜25000円の実数
-- market_price: purchase_priceより高いプレ値（定価の1.2倍〜3倍程度）
-- news_query: この商品のニュース、公式発表、発売情報などを検索するためのキーワード（例: 「ちいかわ ぽてたまぬいぐるみ 発売」「ポケモンカード 新弾 公式」など）
+- market_price: purchase_priceより高いプレ値
+- reason: なぜ今狙い目なのか（初心者にもわかりやすく2〜3文で具体的に解説）
+- news_query: ニュース検索用キーワード
 - 必ず以下のJSON形式のみで出力してください。
 
 {{
@@ -73,8 +72,8 @@ def analyze_trending_item_with_gemini(keyword):
   "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
   "purchase_price": 1800,
   "market_price": 4500,
-  "reason": "なぜ今プレ値化・急上昇しているのか（具体的に1文）",
-  "news_query": "ちいかわ ぽてたまぬいぐるみ 公式 ニュース"
+  "reason": "初回生産分が即完売し、現在フリマで定価以上のプレ値で取引されています。需要が非常に高く回転率が良い商品です。",
+  "news_query": "ちいかわ ぽてたまぬいぐるみ 公式"
 }}
 """
     try:
@@ -99,8 +98,8 @@ def analyze_trending_item_with_gemini(keyword):
             "category": str(res_json.get("category", "ホビー")),
             "purchase_price": pur,
             "market_price": mkt,
-            "reason": str(res_json.get("reason", "フリマ検索急上昇＆品薄高騰中")),
-            "news_query": str(res_json.get("news_query", keyword + " 公式 ニュース"))
+            "reason": str(res_json.get("reason", "現在フリマアプリで品薄状態が続いており、安定した需要があります。")),
+            "news_query": str(res_json.get("news_query", keyword + " 公式"))
         }
     except Exception as e:
         print(f"Gemini解析エラー ({keyword}): {e}")
@@ -111,7 +110,7 @@ def analyze_trending_item_with_gemini(keyword):
             "category": "ホビー",
             "purchase_price": base_pur,
             "market_price": base_mkt,
-            "reason": "フリマ検索急上昇ワードからの自動抽出",
+            "reason": "検索急上昇ワードとなっており、フリマでの取引件数が増加しています。",
             "news_query": keyword + " 公式"
         }
 
@@ -133,13 +132,14 @@ def run_scraper():
         net_profit = market_price - purchase_price - platform_fee - shipping_fee
         profit_margin = round((net_profit / market_price) * 100, 1) if market_price > 0 else 0
         
-        if net_profit >= 2000 and profit_margin >= 25:
-            judgment = "即仕入れ"
+        # 判定（買い / 微妙 / 見送り）の自動振り分け
+        if net_profit >= 2000 and profit_margin >= 22:
+            judgment = "買い"
             score = random.randint(88, 98)
             rank = "S"
         elif net_profit >= 800 and profit_margin >= 10:
-            judgment = "要検討"
-            score = random.randint(70, 85)
+            judgment = "微妙"
+            score = random.randint(68, 84)
             rank = "A"
         else:
             judgment = "見送り"
@@ -152,15 +152,14 @@ def run_scraper():
         yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search/{encoded_search}"
         mercari_sold_url = f"https://jp.mercari.com/search?keyword={encoded_search}&status=sold_out"
         amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
-        # ニュースソースボタン用：GoogleニュースやWeb検索で「商品の公式・ニュース」に直接飛べる検索URL
         news_source_url = f"https://www.google.com/search?q={encoded_news}&tbm=nws"
         
-        calc_details = f"売値:{market_price:,}円 - 仕入:{purchase_price:,}円 - 手数料:{platform_fee:,}円 - 送料:{shipping_fee}円"
-        ai_comment = f"【🔥急上昇 / {judgment} / 利益率:{profit_margin}%】{ai_data['reason']} ({calc_details})"
+        # 複雑な数式を省き、AIが考えた「なぜ売れるのか」の解説文を前面に出すように整理
+        ai_comment = f"{ai_data['reason']} 【判定: {judgment} / 利益率: {profit_margin}%（見込利益: +¥{net_profit:,}）】"
 
         data = {
             "item_title": clean_name,
-            "url": news_source_url, # メインのソースリンクをニュース検索URLに変更
+            "url": news_source_url,
             "mercari_url": mercari_sold_url,
             "amazon_url": amazon_url,
             "yahoo_url": yahoo_url,
@@ -175,7 +174,7 @@ def run_scraper():
         
         try:
             supabase.table("surging_items").insert(data).execute()
-            print(f"保存成功 [{rank}ランク / スコア:{score} / {judgment}]: {clean_name}")
+            print(f"保存成功 [{rank}ランク / スコア:{score} / 判定:{judgment}]: {clean_name}")
         except Exception as db_err:
             print(f"DB保存エラー: {db_err}")
 
