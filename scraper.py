@@ -23,11 +23,8 @@ def delete_old_items():
     except Exception as e:
         print(f"クリーンアップスキップ: {e}")
 
-# Python側で正規表現を使って完全にニュースノイズを除去する安全装置
 def extract_pure_product_name(title):
-    # メディア名（- 日テレNEWS等）を除去
     title = re.sub(r'\s*-\s*.*$', '', title)
-    # ニュースの典型的な文言や記号・煽り文句を全て削除
     noise_patterns = [
         r'【[^】]*】', r'「[^」]*」', r'『[^』]*』',
         r'\d+万枚が即日完売.*?!', r'1人1点', r'対策も“争奪戦”', r'複数のフリマサイトに出品…',
@@ -66,7 +63,6 @@ def analyze_with_gemini(title):
         text = re.sub(r'\s*```$', '', text)
         res_json = json.loads(text)
         
-        # item_titleが不十分ならPython側で抽出したクリーンな名称を採用
         if not res_json.get("item_title") or len(res_json.get("item_title")) > 25:
             res_json["item_title"] = pure_name
             
@@ -86,7 +82,7 @@ def analyze_with_gemini(title):
 def run_scraper():
     delete_old_items()
 
-    keywords = "(コラボ OR 限定 OR ポップアップ OR 抽選 OR 受注生産) AND (即完売 OR 争奪戦 OR プレ値 OR 高騰)"
+    keywords = "コラボ 限定 プレミアム 予約 抽選"
     encoded_keywords = urllib.parse.quote(keywords)
     rss_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
     
