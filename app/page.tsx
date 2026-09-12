@@ -90,17 +90,16 @@ export default function Home() {
             🔥 せどりAI 利益商品ダッシュボード
           </h1>
           <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0 }}>
-            自動収集・AI解析されたリアルタイムデータ一覧（自動更新有効）
+            自動収集・AI解析されたリアルタイムトレンド一覧（自動更新有効）
           </p>
         </header>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {items.map((item) => {
-            // URLが未保存の場合でも商品タイトルから各モールの検索URLを自動生成するフォールバック処理
             const encodedTitle = encodeURIComponent(item.item_title || '')
             const mercariLink = item.mercari_url || item.url || `https://jp.mercari.com/search?keyword=${encodedTitle}`
             const amazonLink = item.amazon_url || `https://www.amazon.co.jp/s?k=${encodedTitle}`
-            const yahooLink = item.yahoo_url || `https://auctions.yahoo.co.jp/search/search?p=${encodedTitle}`
+            const yahooLink = item.yahoo_url || `https://paypayfleamarket.yahoo.co.jp/search?keyword=${encodedTitle}`
             const sourceLink = item.source_url || (item.url && !item.url.includes('mercari') ? item.url : null)
 
             return (
@@ -188,7 +187,7 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 4つのリンクボタン（ソース元・メルカリ・Amazon・Yahoo!フリマ） */}
+                {/* 4つのリンクボタン（ニュース・メルカリ・Amazon・Yahoo!フリマ） */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
                   {sourceLink ? (
                     <a href={sourceLink} target="_blank" rel="noopener noreferrer" style={buttonStyle('#475569')}>
