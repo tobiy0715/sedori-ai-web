@@ -23,45 +23,49 @@ def delete_old_items():
         print(f"クリーンアップスキップ: {e}")
 
 def fetch_yahoo_trending_keywords():
-    """Yahoo!フリマのトレンドワードを確実に取得（AI補正メイン）"""
-    print("AIトレンドジェネレータを作動させます")
+    """Yahoo!フリマ・各種フリマの急上昇・高需要ワードを20件取得"""
+    print("AIトレンドジェネレータを作動させます（20件取得）")
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
         prompt = """
-現在、Yahoo!フリマで【検索急上昇中】または【売り切れ連発中】の注目のトレンド商品・具体的なキャラクター・型番名を5つ提案してください。
-例: ちいかわ りんりんおかおマスコット, ポケモンカード メガブースター, ONE PIECE ギア5 フィギュア, 一番くじ ラストワン賞, サンリオ シークレットマスコット
-カンマ区切りでキーワードのみを出力してください。余計な説明は一切不要です。
+現在、日本のフリマアプリ（Yahoo!フリマ、メルカリ等）で【検索急上昇中】または【売り切れ（SOLD OUT）連発中】の注目のトレンド商品・具体的なキャラクター・型番・限定グッズ名を20個提案してください。
+ホビー、カード、フィギュア、限定アパレル、アミューズメント景品、コラボ商品などジャンルをばらけさせてください。
+
+出力フォーマット:
+カンマ区切りでキーワードのみを出力してください。余計な説明、番号、改行は一切不要です。
 """
         res = model.generate_content(prompt)
-        ai_keywords = [k.strip() for k in res.text.split(",") if k.strip()]
+        ai_keywords = [k.strip() for k in res.text.replace("\n", "").split(",") if k.strip()]
         if ai_keywords:
-            return ai_keywords[:5]
+            return ai_keywords[:20]
     except Exception as e:
         print(f"AIトレンド生成エラー: {e}")
     
     return [
-        "ちいかわ りんりんおかおマスコット",
-        "ポケモンカード MEGA 30th",
-        "ONE PIECE フィギュア 限定",
-        "一番くじ ラストワン賞",
-        "サンリオ マスコット"
+        "ちいかわ りんりんおかおマスコット", "ポケモンカード MEGA 30th", "ONE PIECE フィギュア 限定",
+        "一番くじ ラストワン賞", "サンリオ シークレットマスコット", "たまごっち Uni 限定",
+        "ドラゴンボール 1番くじ A賞", "ハイキュー 缶バッジ", "呪術廻戦 アクリルスタンド",
+        "仮面ライダー プレミアムバンダイ", "ガンプラ HG 限定", "プロ野球チップス カード",
+        "ウマ娘 ぬいぐるみ", "ディズニー クッキーアン", "スターバックス タンブラー 限定",
+        "ナイキ エアフォース1 コラボ", "シュプリーム Tシャツ", "G-SHOCK 限定モデル",
+        "Switch ソフト 限定版", "PS5 周辺機器"
     ]
 
 def analyze_trending_item_with_gemini(keyword):
-    """急上昇ワードを元にYahoo!フリマでの相場と定価・利益額を推測"""
+    """各キーワードのメルカリ・フリマ相場と利益をAI解析・判定"""
     prompt = f"""
 あなたはプロのせどり・転売リサーチAIです。
-現在Yahoo!フリマで検索急上昇中のトレンドワード「{keyword}」について、
-Yahoo!フリマで高値取引されている具体的な商品情報を生成してください。
+フリマアプリで検索急上昇中のトレンドワード「{keyword}」について、
+フリマ市場で取引されているリアルな商品情報・相場を予測・補正して生成してください。
 
 必ず以下のJSON形式「のみ」で出力し、前後にマークダウンや他の文章を一切含めないこと。
 
 {{
-  "item_title": "Yahoo!フリマでそのまま検索できる正確な商品名・型番",
+  "item_title": "フリマでそのまま検索できる正確な商品名・型番",
   "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
   "purchase_price": 3000,
   "market_price": 6500,
-  "reason": "なぜ今Yahoo!フリマで人気・急上昇しているのか（需要理由）"
+  "reason": "なぜ今人気・急上昇・プレ値化しているのか（需要理由）"
 }}
 """
     try:
@@ -85,23 +89,23 @@ Yahoo!フリマで高値取引されている具体的な商品情報を生成�
             "category": str(res_json.get("category", "グッズ")),
             "purchase_price": pur,
             "market_price": mkt,
-            "reason": str(res_json.get("reason", "Yahoo!フリマ検索急上昇中"))
+            "reason": str(res_json.get("reason", "フリマ検索急上昇中"))
         }
     except Exception as e:
-        print(f"Gemini解析エラー: {e}")
+        print(f"Gemini解析エラー ({keyword}): {e}")
         return {
             "item_title": keyword,
             "category": "グッズ",
             "purchase_price": 3000,
             "market_price": 6500,
-            "reason": "Yahoo!フリマ検索急上昇ワードからの自動抽出"
+            "reason": "検索急上昇ワードからの自動抽出"
         }
 
 def run_scraper():
     delete_old_items()
 
     trending_keywords = fetch_yahoo_trending_keywords()
-    print(f"取得した急上昇ワード: {trending_keywords}")
+    print(f"取得件数: {len(trending_keywords)}件の処理を開始します")
 
     for kw in trending_keywords:
         ai_data = analyze_trending_item_with_gemini(kw)
@@ -130,7 +134,6 @@ def run_scraper():
 
         encoded_search = requests.utils.quote(clean_name)
         
-        # Yahoo!フリマの検索URL（販売中・売り切れ問わず確実に表示できる基本URL）
         yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search/{encoded_search}"
         mercari_sold_url = f"https://jp.mercari.com/search?keyword={encoded_search}&status=sold_out"
         amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
@@ -140,7 +143,7 @@ def run_scraper():
 
         data = {
             "item_title": clean_name,
-            "url": yahoo_url,  # メインリンクをYahoo!フリマに変更
+            "url": yahoo_url,
             "mercari_url": mercari_sold_url,
             "amazon_url": amazon_url,
             "yahoo_url": yahoo_url,
