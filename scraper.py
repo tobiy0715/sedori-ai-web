@@ -25,17 +25,17 @@ def delete_old_items():
 
 def analyze_with_gemini(title):
     prompt = f"""
-あなたはプロのせどりアナリストです。以下のニュースタイトルを分析し、JSON形式のみで結果を返してください。余計な文章やマークダウンのバッククォート（```）は含めないこと。
+以下のニュースタイトルを分析し、JSON形式のみで結果を返してください。余計な文章やマークダウンのバッククォート（```）は含めないこと。
 
 ニュースタイトル: {title}
 
 【最重要ルール】
-- "item_title": ニュースの文章、煽り文句（「1人1点」「即日完売」など）、記者名、メディア名はすべて削除し、メルカリ等で実際に検索する「商品名・ブランド名・コラボ名」の純粋な名詞だけを抽出してください（例：「くまモン シール」「しまむら ちいかわ コラボ」など、20文字以内で簡潔に）。
+- "item_title": ニュースのタイトルから、メルカリ等で検索するための「具体的なブランド名や商品名・コラボ名」を必ず抽出してください（例：「くまモン シール」「ちいかわ しまむら」など。「限定コラボグッズ」のような抽象的な表現は一切禁止です）。
 - "score": 1から100までの整数（プレ値化しやすさ）
 - "rank": "SS", "A", "B" のいずれか
 - "category": "ホビー", "アパレル", "PC周辺機器", "トレカ", "音響", "その他" のいずれか
-- "purchase_price": 推定仕入価格（円単位の数値。不明なら定価の推測値）
-- "expected_profit": 見込み利益額の整数（不明なら0にせず推定値を算出）
+- "purchase_price": 推定仕入価格（円単位の数値）
+- "expected_profit": 見込み利益額の整数
 - "ai_forecast": 今後の価格推移の予測
 - "ai_comment": 【買い】または【見送り】を明記した30字程度のアドバイス
 """
@@ -46,18 +46,26 @@ def analyze_with_gemini(title):
         text = re.sub(r'^```json\s*', '', text)
         text = re.sub(r'^```\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
-        return json.loads(text)
+        data = json.loads(text)
+        
+        # 抽象的な名前が返ってきた場合は例外に落としてフォールバックへ回す
+        if not data.get("item_title") or "コラボグッズ" in data.get("item_title"):
+            raise ValueError("具体的な商品名が抽出されていません")
+        return data
     except Exception as e:
-        print(f"Gemini解析エラー: {e}")
+        print(f"Gemini解析エラー/フォールバック発動: {e}")
+        # ニュースタイトルから不要な記号や煽り文句を削ってそのまま活かす
+        clean_fallback = re.sub(r' - [^-]+$', '', title)
+        clean_fallback = re.sub(r'[【】「」『』🚨🔥🎁1人1点即日完売]', ' ', clean_fallback).strip()
         return {
-            "item_title": "限定コラボグッズ",
-            "score": 50,
+            "item_title": clean_fallback[:30] if clean_fallback else title[:30],
+            "score": 60,
             "rank": "B",
             "category": "その他",
             "purchase_price": 2000,
             "expected_profit": 1000,
-            "ai_forecast": "要市場確認",
-            "ai_comment": "【要確認】市場データを取得中"
+            "ai_forecast": "初動の需要に注目",
+            "ai_comment": "【要確認】詳細な市場データをチェック"
         }
 
 def run_scraper():
@@ -79,18 +87,18 @@ def run_scraper():
         
         ai_data = analyze_with_gemini(raw_title)
         
-        clean_name = ai_data.get("item_title") or "注目トレンド商品"
+        clean_name = ai_data.get("item_title") or raw_title[:30]
         encoded_search = urllib.parse.quote(clean_name)
         mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
         
         data = {
             "item_title": clean_name,
             "url": mercari_url,
-            "score": int(ai_data.get("score", 50)),
+            "score": int(ai_data.get("score", 60)),
             "rank": str(ai_data.get("rank", "B")),
             "category": str(ai_data.get("category", "その他")),
-            "purchase_price": int(ai_data.get("purchase_price", 0)),
-            "expected_profit": int(ai_data.get("expected_profit", 0)),
+            "purchase_price": int(ai_data.get("purchase_price", 2000)),
+            "expected_profit": int(ai_data.get("expected_profit", 1000)),
             "ai_comment": str(ai_data.get("ai_comment", "")),
             "created_at": datetime.now(timezone.utc).isoformat()
         }
