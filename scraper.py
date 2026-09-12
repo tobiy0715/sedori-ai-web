@@ -37,20 +37,18 @@ def analyze_with_gemini(title):
     pure_name = extract_pure_product_name(title)
     
     prompt = f"""
-以下のニュース情報を元にせどり分析を行い、必ずJSONフォーマットのみで出力してください。
+以下のニュース情報を元に、せどり・転売の観点から市場価格を予測し、必ずJSONフォーマットのみで出力してください。
 
 ニュース文面: {title}
-抽出済みの仮商品名: {pure_name}
+仮商品名: {pure_name}
 
-出力するJSON構造:
+出力するJSON構造（余計なテキストは含めないこと）:
 {{
-  "item_title": "メルカリ検索用の完全な商品名（例：しまむら ちいかわ コラボ）",
-  "score": 85,
-  "rank": "A",
-  "category": "アパレル",
+  "item_title": "正確な商品名（型番やコラボ名含む）",
+  "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
   "purchase_price": 3000,
-  "expected_profit": 2000,
-  "ai_comment": "【買い】初動の需要が高いため即出品で利益確定可能。"
+  "market_price": 6000,
+  "ai_comment": "【理由】初回限定の予約完売品のため、フリマ初動で高値安定が予想される。"
 }}
 """
     try:
@@ -70,18 +68,15 @@ def analyze_with_gemini(title):
         print(f"Gemini解析エラー詳細: {e}")
         return {
             "item_title": pure_name,
-            "score": 70,
-            "rank": "A",
-            "category": "ホビー",
-            "purchase_price": 2000,
-            "expected_profit": 1500,
-            "ai_comment": "【買い】トレンド急上昇中。早めの市場確認を推奨。"
+            "category": "その他",
+            "purchase_price": 3000,
+            "market_price": 4500,
+            "ai_comment": "【注意】パースエラーのためデフォルト値を設定。"
         }
 
 def run_scraper():
     delete_old_items()
 
-    # 文字コードでURLを組み立ててエディタの勝手なリンク化を物理的に防ぐ
     url_chars = [104, 116, 116, 112, 115, 58, 47, 47, 110, 101, 119, 115, 46, 103, 111, 111, 103, 108, 101, 46, 99, 111, 109, 47, 114, 115, 115, 47, 115, 101, 97, 114, 99, 104]
     rss_url = "".join([chr(c) for c in url_chars])
 
@@ -99,30 +94,51 @@ def run_scraper():
     root = ET.fromstring(response.content)
     items = root.findall('.//item')
 
-    for item in items[:3]:
+    for item in items[:5]:
         raw_title = item.find('title').text
-        
         ai_data = analyze_with_gemini(raw_title)
-        clean_name = ai_data.get("item_title", "トレンド商品")
         
+        clean_name = ai_data.get("item_title", "トレンド商品")
+        purchase_price = int(ai_data.get("purchase_price", 3000))
+        market_price = int(ai_data.get("market_price", 5000))
+        
+        # --- Python側で正確な利益計算 ---
+        platform_fee = int(market_price * 0.10)  # メルカリ販売手数料10%
+        shipping_fee = 750                       # 平均的な送料・梱包費（一律750円仮置き）
+        net_profit = market_price - purchase_price - platform_fee - shipping_fee
+        profit_margin = round((net_profit / market_price) * 100, 1) if market_price > 0 else 0
+        
+        # 判定ロジック
+        if profit_margin >= 25:
+            judgment = "即仕入れ"
+            score = 90
+            rank = "S"
+        elif profit_margin >= 15:
+            judgment = "要検討"
+            score = 75
+            rank = "A"
+        else:
+            judgment = "見送り"
+            score = 40
+            rank = "C"
+
         encoded_search = requests.utils.quote(clean_name)
         mercari_url = f"[https://jp.mercari.com/search?keyword=](https://jp.mercari.com/search?keyword=){encoded_search}"
         
         data = {
             "item_title": clean_name,
             "url": mercari_url,
-            "score": int(ai_data.get("score", 70)),
-            "rank": str(ai_data.get("rank", "A")),
+            "score": score,
+            "rank": rank,
             "category": str(ai_data.get("category", "その他")),
-            "purchase_price": int(ai_data.get("purchase_price", 2000)),
-            "expected_profit": int(ai_data.get("expected_profit", 1500)),
-            "ai_comment": str(ai_data.get("ai_comment", "【買い】要チェック")),
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "purchase_price": purchase_price,
+            "expected_profit": net_profit,
+            "ai_comment": f"【{judgment} / 利益率:{profit_margin}%】{ai_data.get('ai_comment', '')}"
         }
         
         try:
             supabase.table("surging_items").insert(data).execute()
-            print(f"解析＆保存成功: {clean_name}")
+            print(f"保存成功 [{judgment}]: {clean_name} (利益: {net_profit}円 / 利益率: {profit_margin}%)")
         except Exception as db_err:
             print(f"DB保存エラー: {db_err}")
 
