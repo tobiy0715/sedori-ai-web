@@ -20,24 +20,6 @@ type Item = {
   url: string
 }
 
-// 日時をフォーマットする安全な関数
-function formatDate(dateString?: string) {
-  if (!dateString) return '取得日時不明'
-  try {
-    const d = new Date(dateString)
-    if (isNaN(d.getTime())) return '取得日時不明'
-    
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const hours = String(d.getHours()).padStart(2, '0')
-    const minutes = String(d.getMinutes()).padStart(2, '0')
-    
-    return `${month}/${day} ${hours}:${minutes} 取得`
-  } catch (e) {
-    return '取得日時不明'
-  }
-}
-
 export default function Home() {
   const [items, setItems] = useState<Item[]>([])
 
@@ -47,13 +29,15 @@ export default function Home() {
       .select('*')
       .order('created_at', { ascending: false })
       
-    if (data) setItems(data)
+    if (data) {
+      console.log("取得データ:", data)
+      setItems(data)
+    }
   }
 
   useEffect(() => {
     fetchItems()
 
-    // リアルタイム変更検知の設定
     const channel = supabase
       .channel('realtime-surging_items')
       .on(
@@ -94,8 +78,9 @@ export default function Home() {
                 </span>
                 
                 <div className="flex items-center gap-2 text-right">
-                  <span className="text-xs text-slate-400 font-mono">
-                    {formatDate(item.created_at)}
+                  {/* デバッグ用：値が空か文字かをそのまま画面に表示 */}
+                  <span className="text-xs text-yellow-400 font-mono bg-slate-800 px-2 py-0.5 rounded">
+                    日時: {item.created_at ? item.created_at : 'データなし(NULL)'}
                   </span>
                   <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
                     {item.category || 'その他'}
