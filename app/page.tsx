@@ -10,13 +10,13 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 type Item = {
   id: number
   created_at: string
-  title: string
+  item_title: string
   category: string
   purchase_price: number
-  estimated_profit: number
+  expected_profit: number
   score: number
   rank: string
-  memo: string
+  ai_comment: string
   url: string
 }
 
@@ -25,7 +25,7 @@ export default function Home() {
 
   const fetchItems = async () => {
     const { data } = await supabase
-      .from('items')
+      .from('surging_items')
       .select('*')
       .order('created_at', { ascending: false })
     if (data) setItems(data)
@@ -36,10 +36,10 @@ export default function Home() {
 
     // リアルタイム変更検知の設定
     const channel = supabase
-      .channel('realtime-items')
+      .channel('realtime-surging_items')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'items' },
+        { event: '*', schema: 'public', table: 'surging_items' },
         () => {
           fetchItems()
         }
@@ -91,7 +91,7 @@ export default function Home() {
                 </div>
               </div>
 
-              <h2 className="text-lg font-bold text-slate-100">{item.title}</h2>
+              <h2 className="text-lg font-bold text-slate-100">{item.item_title}</h2>
 
               <div className="grid grid-cols-2 gap-4 bg-slate-950/50 p-3 rounded-lg border border-slate-800/50 text-sm">
                 <div>
@@ -103,14 +103,14 @@ export default function Home() {
                 <div>
                   <span className="text-slate-400 text-xs block">見込み利益</span>
                   <span className="font-bold text-emerald-400">
-                    +¥{item.estimated_profit?.toLocaleString()}
+                    +¥{item.expected_profit?.toLocaleString()}
                   </span>
                 </div>
               </div>
 
-              {item.memo && (
+              {item.ai_comment && (
                 <p className="text-xs text-slate-300 bg-slate-800/40 p-2.5 rounded-lg border border-slate-700/30 flex items-center gap-1.5">
-                  💡 {item.memo}
+                  💡 {item.ai_comment}
                 </p>
               )}
 
