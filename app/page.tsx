@@ -20,21 +20,20 @@ type Item = {
   url: string
 }
 
-// 日時をフォーマットする関数（フォーマット失敗時もフォールバック表示）
 function formatDate(dateString?: string) {
   if (!dateString) return '日時未設定'
   try {
     const d = new Date(dateString)
-    if (isNaN(d.getTime())) return '日時形式エラー'
+    if (isNaN(d.getTime())) return '日時エラー'
     
     const month = String(d.getMonth() + 1).padStart(2, '0')
     const day = String(d.getDate()).padStart(2, '0')
     const hours = String(d.getHours()).padStart(2, '0')
     const minutes = String(d.getMinutes()).padStart(2, '0')
     
-    return `${month}/${day} ${hours}:${minutes} 取得`
+    return `${month}/${day} ${hours}:${minutes}`
   } catch (e) {
-    return '日時表示エラー'
+    return '日時エラー'
   }
 }
 
@@ -45,7 +44,7 @@ export default function Home() {
     const { data, error } = await supabase
       .from('surging_items')
       .select('*')
-      .order('id', { ascending: false }) // id順で最新を取得
+      .order('id', { ascending: false })
       
     if (data) {
       setItems(data)
@@ -72,68 +71,89 @@ export default function Home() {
   }, [])
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white p-4 sm:p-8">
+    <main 
+      className="min-h-screen p-4 sm:p-6 md:p-10" 
+      style={{ backgroundColor: '#0f172a', color: '#f8fafc' }}
+    >
       <div className="max-w-4xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+        <header className="border-b border-slate-800 pb-4">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold flex items-center gap-2">
             🔥 せどりAI 利益商品ダッシュボード
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-xs sm:text-sm mt-1">
             自動収集・AI解析されたリアルタイムデータ一覧（自動更新有効）
           </p>
-        </div>
+        </header>
 
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6">
           {items.map((item) => (
             <div
               key={item.id}
-              className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4"
+              className="rounded-xl p-4 sm:p-6 space-y-4 shadow-lg"
+              style={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
             >
-              <div className="flex justify-between items-center gap-2">
-                <span className="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2.5 py-1 rounded-md border border-amber-500/20">
+              {/* バッジ・日時・カテゴリ（レスポンシブ配置） */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700/50 pb-3">
+                <span 
+                  className="text-xs font-semibold px-3 py-1 rounded-full"
+                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}
+                >
                   【{item.rank}ランク】 スコア: {item.score}
                 </span>
                 
-                {/* 「その他」の左側に日時を確実に表示 */}
-                <div className="flex items-center gap-2 text-right">
-                  <span className="text-xs text-slate-400 font-mono bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
-                    {formatDate(item.created_at)}
+                <div className="flex items-center gap-2 text-xs text-slate-300">
+                  <span className="font-mono bg-slate-800 px-2.5 py-1 rounded border border-slate-700">
+                    🕒 {formatDate(item.created_at)}
                   </span>
-                  <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                  <span className="bg-slate-800 px-2.5 py-1 rounded border border-slate-700 font-medium">
                     {item.category || 'その他'}
                   </span>
                 </div>
               </div>
 
-              <h2 className="text-lg font-bold text-slate-100">{item.item_title}</h2>
+              {/* タイトル */}
+              <h2 className="text-base sm:text-lg font-bold leading-snug text-slate-100">
+                {item.item_title}
+              </h2>
 
-              <div className="grid grid-cols-2 gap-4 bg-slate-950/50 p-3 rounded-lg border border-slate-800/50 text-sm">
+              {/* 価格情報（2列グリッド） */}
+              <div 
+                className="grid grid-cols-2 gap-4 p-3 rounded-lg text-sm"
+                style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+              >
                 <div>
-                  <span className="text-slate-400 text-xs block">仕入価格</span>
-                  <span className="font-semibold">
+                  <span className="text-slate-400 text-xs block mb-0.5">仕入価格</span>
+                  <span className="font-semibold text-slate-200 text-base">
                     ¥{item.purchase_price?.toLocaleString() || 0}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 text-xs block">見込み利益</span>
-                  <span className="font-bold text-emerald-400">
+                  <span className="text-slate-400 text-xs block mb-0.5">見込み利益</span>
+                  <span className="font-bold text-emerald-400 text-base">
                     +¥{item.expected_profit?.toLocaleString() || 0}
                   </span>
                 </div>
               </div>
 
+              {/* AIコメント */}
               {item.ai_comment && (
-                <p className="text-xs text-slate-300 bg-slate-800/40 p-2.5 rounded-lg border border-slate-700/30 flex items-center gap-1.5">
-                  💡 {item.ai_comment}
-                </p>
+                <div 
+                  className="text-xs sm:text-sm text-slate-300 p-3 rounded-lg flex items-start gap-2"
+                  style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
+                >
+                  <span className="text-base shrink-0">💡</span>
+                  <span className="leading-relaxed">{item.ai_comment}</span>
+                </div>
               )}
 
+              {/* ボタン */}
               {item.url && (
                 <a
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full text-center bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm py-2.5 rounded-lg transition-colors"
+                  className="block w-full text-center font-bold text-sm py-3 rounded-lg transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: '#059669', color: '#ffffff' }}
                 >
                   仕入れ先ページを開く ↗
                 </a>
