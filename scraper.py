@@ -84,9 +84,10 @@ def run_scraper():
 
     keywords = "コラボ 限定 プレミアム 予約 抽選"
     encoded_keywords = urllib.parse.quote(keywords)
+    raw_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
     
-    # 完全にハードコードしてURLの汚染を100%防ぐ
-    rss_url = f"[https://news.google.com/rss/search?q=](https://news.google.com/rss/search?q=){encoded_keywords}&hl=ja&gl=JP&ceid=JP:ja"
+    # 【超強力な安全装置】万が一URLに「[」や「]」、余分なクォーテーションが含まれても完全に削ぎ落とす
+    rss_url = re.sub(r'[\[\]\'"]', '', raw_url).strip()
     print(f"アクセスURL: {rss_url}")
     
     req = urllib.request.Request(rss_url, headers={'User-Agent': 'Mozilla/5.0'})
