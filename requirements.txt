@@ -1,2 +1,4 @@
-supabase
+requests
 google-generativeai
+supabase
+beautifulsoup4
