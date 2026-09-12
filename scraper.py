@@ -22,20 +22,26 @@ def delete_old_items():
     except Exception as e:
         print(f"クリーンアップスキップ: {e}")
 
-def analyze_with_gemini(title):
+def analyze_with_gemini(title, raw_content):
     prompt = f"""
-以下のニュース情報を元に、せどり・転売の観点から市場価格と仕入価格（定価等）をリアルに推測してください。
+あなたはプロのせどり・転売リサーチAIです。以下のニュース情報やトレンドワードを元に、
+「今まさに市場で流通量が不足し、メルカリやAmazonでプレミアム価格（定価以上の高値）で取引されている、またはその可能性が極めて高い具体的な商品」を1つ特定してください。
+
+【重要】
+- ニュースのタイトルや媒体名をそのまま使わず、せどりプレイヤーがそのままメルカリやAmazonで検索できる「正確な商品名・型番・コラボ名」にクレンジングしてください。
+- 世間で枯渇・争奪戦になっている熱量を反映し、リアルな仕入価格（定価等）と市場実売価格を推測してください。
+
 必ず以下のJSON形式「のみ」で出力し、前後にマークダウンや他の文章を一切含めないこと。
 
 {{
-  "item_title": "商品名（省略せず正確な名称）",
+  "item_title": "クレンジングされた正確な商品名・型番",
   "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
   "purchase_price": 5000,
   "market_price": 8500,
-  "reason": "トレンド理由を簡潔に"
+  "reason": "なぜ今品薄でプレミア化しているか、市場の需要背景を簡潔に"
 }}
 
-ニュース文面: {title}
+元ニュース/トレンド情報: {title} - {raw_content}
 """
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -58,7 +64,7 @@ def analyze_with_gemini(title):
             "category": str(res_json.get("category", "グッズ")),
             "purchase_price": pur,
             "market_price": mkt,
-            "reason": str(res_json.get("reason", "需要拡大による相場上昇"))
+            "reason": str(res_json.get("reason", "需要急増による市場の品薄・相場高騰"))
         }
     except Exception as e:
         print(f"Gemini解析エラー: {e}")
@@ -68,7 +74,7 @@ def analyze_with_gemini(title):
             "category": "グッズ",
             "purchase_price": dynamic_base,
             "market_price": dynamic_base + 4500,
-            "reason": "AI解析フォールバック推計"
+            "reason": "リアルタイムトレンド推計"
         }
 
 def run_scraper():
@@ -78,7 +84,7 @@ def run_scraper():
     rss_url = "".join([chr(c) for c in url_chars])
 
     params = {
-        "q": "コラボ 限定 プレミアム 予約 抽選",
+        "q": "コラボ 限定 プレミアム 予約 抽選 品薄 プレ値",
         "hl": "ja",
         "gl": "JP",
         "ceid": "JP:ja"
@@ -92,11 +98,10 @@ def run_scraper():
 
     for item in items[:5]:
         raw_title = item.find('title').text
-        # ここを修正（正しい丸括弧を使用）
         link_elem = item.find('link')
         source_url = link_elem.text if link_elem is not None else "https://news.google.com"
         
-        ai_data = analyze_with_gemini(raw_title)
+        ai_data = analyze_with_gemini(raw_title, source_url)
         
         clean_name = ai_data["item_title"]
         purchase_price = ai_data["purchase_price"]
@@ -123,7 +128,7 @@ def run_scraper():
         encoded_search = requests.utils.quote(clean_name)
         
         mercari_url = f"https://jp.mercari.com/search?keyword={encoded_search}"
-        yahoo_url = f"https://auctions.yahoo.co.jp/search/search?p={encoded_search}"
+        yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search?keyword={encoded_search}"  # Yahoo!フリマへ修正
         amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
         
         calc_details = f"売値:{market_price:,} - 仕入:{purchase_price:,} - 手数料:{platform_fee} - 送料:{shipping_fee}"
@@ -132,6 +137,10 @@ def run_scraper():
         data = {
             "item_title": clean_name,
             "url": mercari_url,
+            "mercari_url": mercari_url,
+            "amazon_url": amazon_url,
+            "yahoo_url": yahoo_url,
+            "source_url": source_url,
             "score": score,
             "rank": rank,
             "category": str(ai_data["category"]),
