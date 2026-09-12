@@ -92,7 +92,9 @@ def run_scraper():
 
     for item in items[:5]:
         raw_title = item.find('title').text
-        source_url = item.find('link').text if item.find('link'] is not None else "https://news.google.com"
+        # ここを修正（正しい丸括弧を使用）
+        link_elem = item.find('link')
+        source_url = link_elem.text if link_elem is not None else "https://news.google.com"
         
         ai_data = analyze_with_gemini(raw_title)
         
@@ -125,12 +127,8 @@ def run_scraper():
         amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
         
         calc_details = f"売値:{market_price:,} - 仕入:{purchase_price:,} - 手数料:{platform_fee} - 送料:{shipping_fee}"
-        
-        # 文字化けしないようにMarkdownリンクではなくプレーンなテキストのインフォメーションにする
         ai_comment = f"【{judgment} / 利益率:{profit_margin}%】{ai_data['reason']} ({calc_details})"
 
-        # メインのURLにはメルカリを置きつつ、AmazonやYahooのリンクはもしフロント側で対応していれば別だが、
-        # ここでは安全にコメント文字列を綺麗に整形しておく
         data = {
             "item_title": clean_name,
             "url": mercari_url,
