@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 type Item = {
   id: number
-  created_at: string
+  created_at?: string
   item_title: string
   category: string
   purchase_price: number
@@ -20,14 +20,33 @@ type Item = {
   url: string
 }
 
+// 日時をフォーマットする安全な関数
+function formatDate(dateString?: string) {
+  if (!dateString) return '取得日時不明'
+  try {
+    const d = new Date(dateString)
+    if (isNaN(d.getTime())) return '取得日時不明'
+    
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hours = String(d.getHours()).padStart(2, '0')
+    const minutes = String(d.getMinutes()).padStart(2, '0')
+    
+    return `${month}/${day} ${hours}:${minutes} 取得`
+  } catch (e) {
+    return '取得日時不明'
+  }
+}
+
 export default function Home() {
   const [items, setItems] = useState<Item[]>([])
 
   const fetchItems = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('surging_items')
       .select('*')
       .order('created_at', { ascending: false })
+      
     if (data) setItems(data)
   }
 
@@ -69,24 +88,17 @@ export default function Home() {
               key={item.id}
               className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4"
             >
-              <div className="flex justify-between items-start gap-2">
+              <div className="flex justify-between items-center gap-2">
                 <span className="bg-amber-500/10 text-amber-400 text-xs font-semibold px-2.5 py-1 rounded-md border border-amber-500/20">
                   【{item.rank}ランク】 スコア: {item.score}
                 </span>
+                
                 <div className="flex items-center gap-2 text-right">
-                  {item.created_at && (
-                    <span className="text-xs text-slate-400">
-                      {new Date(item.created_at).toLocaleString('ja-JP', {
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      取得
-                    </span>
-                  )}
+                  <span className="text-xs text-slate-400 font-mono">
+                    {formatDate(item.created_at)}
+                  </span>
                   <span className="text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-                    {item.category}
+                    {item.category || 'その他'}
                   </span>
                 </div>
               </div>
@@ -97,13 +109,13 @@ export default function Home() {
                 <div>
                   <span className="text-slate-400 text-xs block">仕入価格</span>
                   <span className="font-semibold">
-                    ¥{item.purchase_price?.toLocaleString()}
+                    ¥{item.purchase_price?.toLocaleString() || 0}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 text-xs block">見込み利益</span>
                   <span className="font-bold text-emerald-400">
-                    +¥{item.expected_profit?.toLocaleString()}
+                    +¥{item.expected_profit?.toLocaleString() || 0}
                   </span>
                 </div>
               </div>
