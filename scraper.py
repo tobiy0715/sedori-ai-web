@@ -1,182 +1,140 @@
 import os
 import re
 import json
-import random
+import urllib.parse
+from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta, timezone
 import google.generativeai as genai
 from supabase import create_client, Client
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# --- 設定・初期化 ---
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 
-def delete_old_items():
-    three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+def fetch_trending_topics():
+    """ウェブ上の最新ニュースやトレンドからキーワードを自動取得する"""
+    items = []
     try:
-        supabase.table("surging_items").delete().lt("created_at", three_days_ago).execute()
-        print("過去データをクリーンアップしました")
+        # 例としてYahoo!ニュースのヘッドラインをスクレイピング
+        url = "https://news.yahoo.co.jp/"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            links = soup.find_all('a', limit=20)
+            for link in links:
+                text = link.get_text().strip()
+                if len(text) > 6: # ある程度の長さがある見出しを対象
+                    items.append({
+                        "title": text,
+                        "rank": "A",
+                        "score": 75,
+                        "url": link.get('href', url)
+                    })
     except Exception as e:
-        print(f"クリーンアップスキップ: {e}")
-
-def fetch_yahoo_trending_keywords():
-    print("AIトレンドジェネレータを作動させます（20件取得）")
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = """
-現在、日本のフリマアプリ（Yahoo!フリマ、メルカリ）で検索急上昇中、またはプレ値・売り切れ連発中の注目のトレンド商品を20個提案してください。
-アニメグッズ、カードゲーム、限定フィギュア、ゲーム周辺機器、コラボアパレル、一番くじ景品などをバランスよく混ぜてください。
-
-出力フォーマット:
-カンマ区切りでキーワードのみを出力してください（例: ちいかわ ぽてたまぬいぐるみ, ポケモンカード クレイバースト BOX, ONE PIECE ギア5 フィギュア, ...）。
-余計な説明、番号、改行は一切不要です。
-"""
-        res = model.generate_content(prompt)
-        ai_keywords = [k.strip() for k in res.text.replace("\n", "").split(",") if k.strip()]
-        if len(ai_keywords) >= 10:
-            random.shuffle(ai_keywords)
-            return ai_keywords[:20]
-    except Exception as e:
-        print(f"AIトレンド生成エラー: {e}")
+        print(f"スクレイピングエラー: {e}")
     
-    default_kws = [
-        "ちいかわ ぽてたまぬいぐるみ", "ポケモンカード 拡張パック", "ONE PIECE プレミアムカードコレクション",
-        "一番くじ ラストワン賞 フィギュア", "サンリオ シークレットマスコット", "たまごっち Uni 限定カラー",
-        "ドラゴンボール MASTERLISE", "ハイキュー 描き下ろし缶バッジ", "呪術廻戦 ジオラマアクリルスタンド",
-        "仮面ライダー CSG変身ベルト", "ガンプラ HG 1/144 限定", "プロ野球チップス 2026",
-        "ウマ娘 巨大ぬいぐるみ", "ディズニー クッキーアン ぬいぐるみ", "スターバックス ステンレスボトル",
-        "ナイキ ダンク LOW 限定", "シュプリーム ボックスロゴ", "G-SHOCK 40周年限定",
-        "Switch プロコントローラー 限定版", "PS5 デジタルエディション"
-    ]
-    random.shuffle(default_kws)
-    return default_kws[:20]
+    # 取得できなかった場合のフォールバック
+    if not items:
+        items = [
+            {"title": "最新トレンド商品トレンド調査", "rank": "B", "score": 60, "url": "https://news.yahoo.co.jp/"}
+        ]
+    return items[:5] # 上位5件に絞る
 
-def analyze_trending_item_with_gemini(keyword):
+def analyze_item_with_ai(item_title):
+    """取得したニュースからせどり対象商品をAIに推測・解析させる"""
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
     prompt = f"""
-あなたはプロのせどり・転売リサーチAIです。
-フリマアプリのトレンドワード「{keyword}」について、実際の市場相場・リアルな仕入れ価格と売り切れ相場（売値）、ニュース検索クエリ、そして【なぜこの商品が今狙い目なのか】の具体的な理由を分かりやすく解説した文章を生成してください。
+    あなたはプロのせどり・転売アナリストです。
+    以下のニュース見出し・キーワードを分析し、この話題に関連して転売やせどりで需要が急上昇しそうな具体的な商品名を1つ挙げ、カテゴリーと仕入判定を行ってください。
 
-【出力条件】
-- purchase_price: 500円〜25000円の実数
-- market_price: purchase_priceより高いプレ値
-- reason: なぜ今狙い目なのか（初心者にもわかりやすく2〜3文で具体的に解説）
-- news_query: ニュース検索用キーワード
-- 必ず以下のJSON形式のみで出力してください。
+    【対象ニュース/キーワード】: {item_title}
 
-{{
-  "item_title": "フリマでそのまま検索できる正確な商品名・型番",
-  "category": "ホビー / アパレル / 家電 / グッズ のいずれか",
-  "purchase_price": 1800,
-  "market_price": 4500,
-  "reason": "初回生産分が即完売し、現在フリマで定価以上のプレ値で取引されています。需要が非常に高く回転率が良い商品です。",
-  "news_query": "ちいかわ ぽてたまぬいぐるみ 公式"
-}}
-"""
+    ■ カテゴリー選択肢（以下の中から最も適切なものを1つだけ厳密に選んでください）:
+    - ゲーム
+    - 家電・ガジェット
+    - トレーディングカード
+    - ホビー
+    - アパレル・ブランド
+    - コスメ・美容
+    - 日用品・食品
+    - その他
+
+    ■ 出力フォーマット (必ず以下の純粋なJSON形式のみで出力してください):
+    {{
+      "target_item": "せどり対象となる具体的な商品名（例：PlayStation 5 Pro など）",
+      "category": "選択したカテゴリー名",
+      "purchase_price": 定価や相場に基づく推定仕入れ価格(半角数値のみ),
+      "expected_profit": 推定見込み利益(半角数値のみ),
+      "judgment": "買い" または "見送り" または "微妙",
+      "reason": "短い根拠・理由（50文字程度）"
+    }}
+    """
+    
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         text = response.text.strip()
-        
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            text = match.group(0)
-            
-        res_json = json.loads(text)
-        
-        pur = int(res_json.get("purchase_price", 2000))
-        mkt = int(res_json.get("market_price", 4500))
-        
-        if pur <= 0: pur = random.randint(1200, 4800)
-        if mkt <= pur: mkt = int(pur * random.uniform(1.3, 2.2))
-
-        return {
-            "item_title": str(res_json.get("item_title", keyword)),
-            "category": str(res_json.get("category", "ホビー")),
-            "purchase_price": pur,
-            "market_price": mkt,
-            "reason": str(res_json.get("reason", "現在フリマアプリで品薄状態が続いており、安定した需要があります。")),
-            "news_query": str(res_json.get("news_query", keyword + " 公式"))
-        }
+        json_match = re.search(r'\{.*\}', text, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group())
+            return data
     except Exception as e:
-        print(f"Gemini解析エラー ({keyword}): {e}")
-        base_pur = random.randint(1500, 6000)
-        base_mkt = int(base_pur * random.uniform(1.3, 2.0))
-        return {
-            "item_title": keyword,
-            "category": "ホビー",
-            "purchase_price": base_pur,
-            "market_price": base_mkt,
-            "reason": "検索急上昇ワードとなっており、フリマでの取引件数が増加しています。",
-            "news_query": keyword + " 公式"
-        }
+        print(f"AI解析エラー: {e}")
+    
+    return {
+        "target_item": item_title,
+        "category": "その他",
+        "purchase_price": 3000,
+        "expected_profit": 500,
+        "judgment": "微妙",
+        "reason": "自動解析データの抽出に失敗しました。"
+    }
 
 def run_scraper():
-    delete_old_items()
+    print("=== リアルタイム自動スクレイピング＆AI解析開始 ===")
+    trending_items = fetch_trending_topics()
 
-    trending_keywords = fetch_yahoo_trending_keywords()
-    print(f"取得件数: {len(trending_keywords)}件の処理を開始します")
+    for target in trending_items:
+        raw_title = target["title"]
+        ai_res = analyze_item_with_ai(raw_title)
+        
+        item_title = ai_res.get("target_item", raw_title)
+        category = ai_res.get("category", "その他")
+        purchase_price = ai_res.get("purchase_price", 0)
+        expected_profit = ai_res.get("expected_profit", 0)
+        judgment = ai_res.get("judgment", "微妙")
+        reason = ai_res.get("reason", "")
+        
+        ai_comment = f"【判定: {judgment}】 {reason}"
 
-    for kw in trending_keywords:
-        ai_data = analyze_trending_item_with_gemini(kw)
-        
-        clean_name = ai_data["item_title"]
-        purchase_price = ai_data["purchase_price"]
-        market_price = ai_data["market_price"]
-        
-        platform_fee = int(market_price * 0.10)
-        shipping_fee = 700
-        net_profit = market_price - purchase_price - platform_fee - shipping_fee
-        profit_margin = round((net_profit / market_price) * 100, 1) if market_price > 0 else 0
-        
-        # 判定（買い / 微妙 / 見送り）の自動振り分け
-        if net_profit >= 2000 and profit_margin >= 22:
-            judgment = "買い"
-            score = random.randint(88, 98)
-            rank = "S"
-        elif net_profit >= 800 and profit_margin >= 10:
-            judgment = "微妙"
-            score = random.randint(68, 84)
-            rank = "A"
-        else:
-            judgment = "見送り"
-            score = random.randint(40, 65)
-            rank = "B"
+        encoded_title = urllib.parse.quote(item_title)
+        mercari_url = f"https://jp.mercari.com/search?keyword={encoded_title}&status=on_sale"
+        amazon_url = f"https://www.amazon.co.jp/s?k={encoded_title}"
+        yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search/{encoded_title}"
 
-        encoded_search = requests.utils.quote(clean_name)
-        encoded_news = requests.utils.quote(ai_data["news_query"])
-        
-        yahoo_url = f"https://paypayfleamarket.yahoo.co.jp/search/{encoded_search}"
-        mercari_sold_url = f"https://jp.mercari.com/search?keyword={encoded_search}&status=sold_out"
-        amazon_url = f"https://www.amazon.co.jp/s?k={encoded_search}"
-        news_source_url = f"https://www.google.com/search?q={encoded_news}&tbm=nws"
-        
-        # 複雑な数式を省き、AIが考えた「なぜ売れるのか」の解説文を前面に出すように整理
-        ai_comment = f"{ai_data['reason']} 【判定: {judgment} / 利益率: {profit_margin}%（見込利益: +¥{net_profit:,}）】"
-
-        data = {
-            "item_title": clean_name,
-            "url": news_source_url,
-            "mercari_url": mercari_sold_url,
+        record = {
+            "item_title": item_title,
+            "rank": target["rank"],
+            "score": target["score"],
+            "category": category,
+            "purchase_price": purchase_price,
+            "expected_profit": expected_profit,
+            "ai_comment": ai_comment,
+            "source_url": target["url"],
+            "mercari_url": mercari_url,
             "amazon_url": amazon_url,
             "yahoo_url": yahoo_url,
-            "source_url": news_source_url,
-            "score": score,
-            "rank": rank,
-            "category": str(ai_data["category"]),
-            "purchase_price": purchase_price,
-            "expected_profit": net_profit,
-            "ai_comment": ai_comment
+            "created_at": datetime.utcnow().isoformat()
         }
-        
-        try:
-            supabase.table("surging_items").insert(data).execute()
-            print(f"保存成功 [{rank}ランク / スコア:{score} / 判定:{judgment}]: {clean_name}")
-        except Exception as db_err:
-            print(f"DB保存エラー: {db_err}")
+
+        supabase.table("surging_items").insert(record).execute()
+        print(f"自動保存完了: [{category}] {item_title} (判定: {judgment})")
 
 if __name__ == "__main__":
     run_scraper()
