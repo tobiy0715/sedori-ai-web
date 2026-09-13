@@ -24,21 +24,33 @@ export default function Home() {
     fetchItems();
   }, []);
 
-  // 「買い」「見送り」「微妙」などの特定文字列だけの色を変更する関数
+  // 特定のキーワードだけ色を変える（買い：黄色ボールド、見送り：赤文字、微妙：水色）
   const renderHighlightedComment = (comment: string) => {
+    if (!comment) return '';
     const regex = /(買い|見送り|微妙|即仕入れ|要検討)/g;
     const parts = comment.split(regex);
 
     return parts.map((part, i) => {
       if (part === "買い" || part === "即仕入れ") {
-        return <span key={i} style={{ color: '#facc15', fontWeight: 'bold' }}>{part}</span>; // 買い：黄色ボールド
+        return <span key={i} style={{ color: '#facc15', fontWeight: 'bold' }}>{part}</span>;
       } else if (part === "見送り") {
-        return <span key={i} style={{ color: '#ef4444', fontWeight: 'bold' }}>{part}</span>; // 見送り：赤文字
+        return <span key={i} style={{ color: '#ef4444', fontWeight: 'bold' }}>{part}</span>;
       } else if (part === "微妙" || part === "要検討") {
-        return <span key={i} style={{ color: '#22d3ee', fontWeight: 'bold' }}>{part}</span>; // 水色
+        return <span key={i} style={{ color: '#22d3ee', fontWeight: 'bold' }}>{part}</span>;
       }
       return part;
     });
+  };
+
+  // カテゴリーに応じたバッジスタイルの設定
+  const getCategoryBadgeStyle = (category: string) => {
+    if (category?.includes("ゲーム")) return { backgroundColor: '#1d4ed8', color: '#93c5fd' };
+    if (category?.includes("家電") || category?.includes("ガジェット")) return { backgroundColor: '#047857', color: '#6ee7b7' };
+    if (category?.includes("カード") || category?.includes("トレカ")) return { backgroundColor: '#6b21a8', color: '#e9d5ff' };
+    if (category?.includes("アパレル") || category?.includes("ブランド")) return { backgroundColor: '#be185d', color: '#fbcfe8' };
+    if (category?.includes("コスメ") || category?.includes("美容")) return { backgroundColor: '#9d174d', color: '#fce7f3' };
+    if (category?.includes("ホビー")) return { backgroundColor: '#b45309', color: '#fde68a' };
+    return { backgroundColor: '#334155', color: '#cbd5e1' };
   };
 
   return (
@@ -59,9 +71,11 @@ export default function Home() {
                   <span style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fcd34d', fontSize: '12px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
                     【{item.rank}ランク】 スコア: {item.score}
                   </span>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span>🕒 {new Date(item.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                    <span style={{ backgroundColor: '#1e293b', padding: '2px 6px', borderRadius: '4px' }}>{item.category}</span>
+                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold', ...getCategoryBadgeStyle(item.category) }}>
+                      {item.category || 'ホビー'}
+                    </span>
                   </div>
                 </div>
 
