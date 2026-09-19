@@ -24,7 +24,6 @@ export default function Home() {
     fetchItems();
   }, []);
 
-  // 特定のキーワードだけ色を変える（買い：黄色ボールド、見送り：赤文字、微妙：水色）
   const renderHighlightedComment = (comment: string) => {
     if (!comment) return '';
     const regex = /(買い|見送り|微妙|即仕入れ|要検討)/g;
@@ -42,81 +41,97 @@ export default function Home() {
     });
   };
 
-  // カテゴリーに応じたバッジスタイルの設定
-  const getCategoryBadgeStyle = (category: string) => {
-    if (category?.includes("ゲーム")) return { backgroundColor: '#1d4ed8', color: '#93c5fd' };
-    if (category?.includes("家電") || category?.includes("ガジェット")) return { backgroundColor: '#047857', color: '#6ee7b7' };
-    if (category?.includes("カード") || category?.includes("トレカ")) return { backgroundColor: '#6b21a8', color: '#e9d5ff' };
-    if (category?.includes("アパレル") || category?.includes("ブランド")) return { backgroundColor: '#be185d', color: '#fbcfe8' };
-    if (category?.includes("コスメ") || category?.includes("美容")) return { backgroundColor: '#9d174d', color: '#fce7f3' };
-    if (category?.includes("ホビー")) return { backgroundColor: '#b45309', color: '#fde68a' };
-    return { backgroundColor: '#334155', color: '#cbd5e1' };
-  };
-
   return (
-    <main style={{ backgroundColor: '#020617', color: '#ffffff', minHeight: '100vh', padding: '16px', fontFamily: 'sans-serif' }}>
-      <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '4px' }}>🔥 せどりAI 利益商品ダッシュボード</h1>
-        <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '16px' }}>自動収集・AI解析されたリアルタイムトレンド一覧（自動更新有効）</p>
+    <main style={{ backgroundColor: '#020617', color: '#ffffff', minHeight: '100vh', padding: '12px', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+      <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+        
+        {/* iPhoneヘッダー */}
+        <div style={{ marginBottom: '16px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>🔥 せどりAI プロフェッショナル</h1>
+          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0 0 0' }}>Keepa・セラースケット・poipoiのイイトコ取り</p>
+        </div>
 
         {loading ? (
           <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0' }}>読み込み中...</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {items.map((item) => (
-              <div key={item.id} style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', padding: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
+              <div key={item.id} style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', padding: '14px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
                 
-                {/* ヘッダー情報 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fcd34d', fontSize: '12px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                    【{item.rank}ランク】 スコア: {item.score}
-                  </span>
-                  <div style={{ fontSize: '12px', color: '#94a3b8', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span>🕒 {new Date(item.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                    <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold', ...getCategoryBadgeStyle(item.category) }}>
-                      {item.category || 'ホビー'}
+                {/* ランク・回転速度・セラースケット風リスク判定 */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '4px' }}>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <span style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fcd34d', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
+                      【{item.rank}】{item.score}点
                     </span>
+                    {item.sales_speed && (
+                      <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
+                        ⚡ {item.sales_speed}
+                      </span>
+                    )}
+                    {item.risk_level && item.risk_level !== '安全' && (
+                      <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
+                        {item.risk_level}
+                      </span>
+                    )}
                   </div>
+                  <span style={{ fontSize: '10px', color: '#64748b' }}>
+                    {new Date(item.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
 
-                {/* タイトル */}
-                <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' }}>{item.item_title}</h2>
+                {/* 商品タイトル */}
+                <h2 style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '10px', lineHeight: '1.3' }}>{item.item_title}</h2>
 
-                {/* 価格情報 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', backgroundColor: 'rgba(2, 6, 23, 0.5)', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
+                {/* 価格 & 相場 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', backgroundColor: '#020617', padding: '8px', borderRadius: '8px', marginBottom: '10px', textAlign: 'center' }}>
                   <div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>仕入価格</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>¥{item.purchase_price?.toLocaleString()}</div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>仕入目安</div>
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '2px' }}>¥{item.purchase_price?.toLocaleString()}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: '12px', color: '#94a3b8' }}>見込み利益</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: item.expected_profit >= 0 ? '#34d399' : '#f87171' }}>
+                    <div style={{ fontSize: '10px', color: '#38bdf8' }}>相場平均</div>
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#38bdf8', marginTop: '2px' }}>¥{item.avg_sold_price ? item.avg_sold_price.toLocaleString() : '-'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>見込み利益</div>
+                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: item.expected_profit >= 0 ? '#34d399' : '#f87171', marginTop: '2px' }}>
                       {item.expected_profit >= 0 ? '+' : ''}¥{item.expected_profit?.toLocaleString()}
                     </div>
                   </div>
                 </div>
 
-                {/* AIコメント（特定文字列のみ色変更） */}
-                <div style={{ backgroundColor: '#1e293b', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                  <p style={{ fontSize: '14px', lineHeight: '1.6', margin: 0, color: '#cbd5e1' }}>
+                {/* AI解析理由 */}
+                <div style={{ backgroundColor: '#1e293b', padding: '8px 10px', borderRadius: '6px', marginBottom: '10px' }}>
+                  <p style={{ fontSize: '12px', lineHeight: '1.4', margin: 0, color: '#cbd5e1' }}>
                     💡 {renderHighlightedComment(item.ai_comment)}
                   </p>
                 </div>
 
-                {/* 各種ボタン */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                  <a href={item.source_url || item.url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#334155', color: '#fff', textAlign: 'center', fontSize: '12px', padding: '10px', borderRadius: '6px', fontWeight: 'bold', textDecoration: 'none' }}>
-                    📰 ニュースソース ↗
+                {/* 1タップ分析 & 横断サーチボタン */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px' }}>
+                  <a href={item.mercari_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#059669', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
+                    🛍️ メルカリ
                   </a>
-                  <a href={item.mercari_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#059669', color: '#fff', textAlign: 'center', fontSize: '12px', padding: '10px', borderRadius: '6px', fontWeight: 'bold', textDecoration: 'none' }}>
-                    🛍️ メルカリ検索 ↗
+                  <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#d97706', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
+                    📦 Amazon
                   </a>
-                  <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#d97706', color: '#fff', textAlign: 'center', fontSize: '12px', padding: '10px', borderRadius: '6px', fontWeight: 'bold', textDecoration: 'none' }}>
-                    📦 Amazon検索 ↗
+                  <a href={item.keepa_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#4f46e5', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
+                    📊 Keepa推移
                   </a>
-                  <a href={item.yahoo_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#2563eb', color: '#fff', textAlign: 'center', fontSize: '12px', padding: '10px', borderRadius: '6px', fontWeight: 'bold', textDecoration: 'none' }}>
-                    🟡 Yahoo!フリマ ↗
+                  <a href={item.yahoo_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#1d4ed8', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none' }}>
+                    PayPayフリマ
                   </a>
+                  {item.surugaya_url && (
+                    <a href={item.surugaya_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#0284c7', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none' }}>
+                      駿河屋
+                    </a>
+                  )}
+                  {item.hardoff_url && (
+                    <a href={item.hardoff_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#15803d', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none' }}>
+                      ハードオフ
+                    </a>
+                  )}
                 </div>
 
               </div>
