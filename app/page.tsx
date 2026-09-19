@@ -12,8 +12,8 @@ export default function Home() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
+  // DBから最新データ20件を取得
   const fetchItems = async () => {
-    setLoading(true)
     const { data, error } = await supabase
       .from('surging_items')
       .select('*')
@@ -24,6 +24,19 @@ export default function Home() {
       console.error('データ取得エラー:', error)
     } else if (data) {
       setItems(data)
+    }
+  }
+
+  // 🔄 ボタン押下時にバックエンドAPIを直接起動 ➔ DBから最新一覧を再取得
+  const handleRealtimeTrigger = async () => {
+    setLoading(true)
+    try {
+      // 1. /api/scrape を叩いて Google Trends / 辞書展開から新規データをDBへ即時保存
+      await fetch('/api/scrape', { method: 'POST' })
+      // 2. 保存された最新データをDBから読み込み
+      await fetchItems()
+    } catch (e) {
+      console.error('リアルタイム取得エラー:', e)
     }
     setLoading(false)
   }
@@ -41,24 +54,23 @@ export default function Home() {
             🔥 せどりAI プロフェッショナル
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            AIディベート判定 / 利益率・売却日数・リアルタイム検出
+            1,700語辞書 × 100クエリ展開 / リアルタイム自動検出
           </p>
         </div>
         <button
-          onClick={fetchItems}
+          onClick={handleRealtimeTrigger}
           disabled={loading}
-          className="ml-2 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shrink-0 transition"
+          className="ml-2 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold shrink-0 transition flex items-center gap-1 shadow-lg disabled:opacity-50"
         >
-          🔄 {loading ? '更新中' : 'リアルタイム更新'}
+          {loading ? '⚡ 100分析中...' : '🔄 リアルタイム取得'}
         </button>
       </header>
 
-      {/* カードリスト */}
+      {/* 商品カード一覧 */}
       <div className="space-y-4">
         {items.map((item) => (
           <div key={item.id || item.created_at} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-            
-            {/* 上段：ランク・AIジャッジ・売却日数 */}
+            {/* ランク・判定・スピード */}
             <div className="flex justify-between items-center mb-2 text-xs">
               <div className="flex gap-1.5 flex-wrap">
                 <span className="bg-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/30">
@@ -73,17 +85,17 @@ export default function Home() {
               </span>
             </div>
 
-            {/* 商品タイトル */}
+            {/* タイトル */}
             <h2 className="font-bold text-sm mb-2 text-slate-100 leading-snug">{item.item_title}</h2>
 
-            {/* AIの判定理由コメント */}
+            {/* AI分析理由 */}
             {item.ai_reason && (
               <p className="text-xs text-amber-200/80 bg-amber-950/30 p-2 rounded mb-3 border border-amber-900/40">
                 💬 AI分析: {item.ai_reason}
               </p>
             )}
 
-            {/* 価格・利益・利益率（4項目グリッド） */}
+            {/* 価格・利益計算 */}
             <div className="grid grid-cols-4 gap-1 text-center bg-slate-950 p-2.5 rounded-lg mb-3 text-xs">
               <div>
                 <div className="text-slate-500 text-[10px]">仕入額</div>
@@ -103,14 +115,14 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 6店舗リンクボタン */}
+            {/* 6店舗マルチプラットフォーム検索URL */}
             <div className="grid grid-cols-3 gap-1.5 text-xs font-semibold">
-              <a href={item.mercari_url || '#'} target="_blank" rel="noreferrer" className="bg-red-600 text-white py-1.5 rounded text-center">メルカリ</a>
-              <a href={item.amazon_url || '#'} target="_blank" rel="noreferrer" className="bg-amber-600 text-white py-1.5 rounded text-center">Amazon</a>
-              <a href={item.keepa_url || '#'} target="_blank" rel="noreferrer" className="bg-indigo-600 text-white py-1.5 rounded text-center">Keepa</a>
-              <a href={item.paypay_url || '#'} target="_blank" rel="noreferrer" className="bg-purple-600 text-white py-1.5 rounded text-center">Yahoo!フリマ</a>
-              <a href={item.surugaya_url || '#'} target="_blank" rel="noreferrer" className="bg-blue-600 text-white py-1.5 rounded text-center">駿河屋</a>
-              <a href={item.hardoff_url || '#'} target="_blank" rel="noreferrer" className="bg-cyan-600 text-white py-1.5 rounded text-center">ハードオフ</a>
+              <a href={item.mercari_url || '#'} target="_blank" rel="noreferrer" className="bg-red-600 hover:bg-red-500 text-white py-1.5 rounded text-center transition">メルカリ</a>
+              <a href={item.amazon_url || '#'} target="_blank" rel="noreferrer" className="bg-amber-600 hover:bg-amber-500 text-white py-1.5 rounded text-center transition">Amazon</a>
+              <a href={item.keepa_url || '#'} target="_blank" rel="noreferrer" className="bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 rounded text-center transition">Keepa</a>
+              <a href={item.paypay_url || '#'} target="_blank" rel="noreferrer" className="bg-purple-600 hover:bg-purple-500 text-white py-1.5 rounded text-center transition">Yahoo!フリマ</a>
+              <a href={item.surugaya_url || '#'} target="_blank" rel="noreferrer" className="bg-blue-600 hover:bg-blue-500 text-white py-1.5 rounded text-center transition">駿河屋</a>
+              <a href={item.hardoff_url || '#'} target="_blank" rel="noreferrer" className="bg-cyan-600 hover:bg-cyan-500 text-white py-1.5 rounded text-center transition">ハードオフ</a>
             </div>
           </div>
         ))}
