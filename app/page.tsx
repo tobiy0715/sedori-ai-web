@@ -1,47 +1,80 @@
-import React from 'react';
-import { createClient } from '@supabase/supabase-js';
+'use client';
 
-// Vercel/Next.jsのキャッシュを無効化し、常に最新のDBデータを即時取得する
-export const revalidate = 0;
+import React, { useEffect, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default async function HomePage() {
-  // 作成日時（created_at）の降順で最新20件を取得
-  const { data: items, error } = await supabase
-    .from('surging_items')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(20);
+export default function HomePage() {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  if (error) {
-    console.error('Supabase fetch error:', error);
-  }
+  // データ取得処理
+  const fetchItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('surging_items')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Supabase fetch error:', error);
+      } else if (data) {
+        setItems(data);
+      }
+    } catch (err) {
+      console.error('Fetch exception:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchItems();
+    // 30秒ごとに自動リロード
+    const interval = setInterval(fetchItems, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 max-w-xl mx-auto">
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 max-w-xl mx-auto font-sans">
       {/* ヘッダー */}
-      <header className="mb-6 border-b border-slate-800 pb-4">
-        <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-200">
-          🔥 せどりAI プロフェッショナル
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">
-          Keepa・セラースケット・poipoiのイイトコ取り / 5〜10分自動更新
-        </p>
+      <header className="mb-6 border-b border-slate-800 pb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-200">
+            🔥 せどりAI プロフェッショナル
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Keepa・セラースケット・poipoiのイイトコ取り / 5〜10分自動更新
+          </p>
+        </div>
+        <button
+          onClick={fetchItems}
+          className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg border border-slate-700 transition active:scale-95 shrink-0"
+        >
+          🔄 更新
+        </button>
       </header>
 
       {/* カードリスト */}
       <div className="space-y-4">
-        {items && items.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-12 text-slate-500 text-sm animate-pulse">
+            最新のAI精査データを読み込み中...
+          </div>
+        ) : items && items.length > 0 ? (
           items.map((item) => {
-            const formattedTime = new Date(item.created_at).toLocaleString('ja-JP', {
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+            const formattedTime = item.created_at
+              ? new Date(item.created_at).toLocaleString('ja-JP', {
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : '';
 
             return (
               <div
@@ -52,10 +85,10 @@ export default async function HomePage() {
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold px-2 py-0.5 rounded">
-                      【{item.rank}】 {item.score}点
+                      【{item.rank || 'A'}】 {item.score || 75}点
                     </span>
                     <span className="bg-emerald-500/20 text-emerald-300 font-medium px-2 py-0.5 rounded flex items-center gap-1">
-                      ⚡ {item.sales_speed}
+                      ⚡ {item.sales_speed || '即売れ'}
                     </span>
                   </div>
                   <span className="text-slate-500 font-mono text-[11px]">
@@ -68,24 +101,24 @@ export default async function HomePage() {
                   {item.item_title}
                 </h2>
 
-                {/* 数値データ（仕入目安、相場、利益） */}
+                {/* 数値データ */}
                 <div className="grid grid-cols-3 gap-2 bg-slate-950/60 p-2.5 rounded-lg text-center text-xs">
                   <div>
                     <span className="text-slate-400 text-[10px] block">仕入目安</span>
                     <span className="font-semibold text-slate-200">
-                      ¥{item.purchase_price?.toLocaleString()}
+                      ¥{item.purchase_price?.toLocaleString() || 0}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] block">相場平均</span>
                     <span className="font-semibold text-slate-200">
-                      ¥{item.avg_sold_price?.toLocaleString()}
+                      ¥{item.avg_sold_price?.toLocaleString() || 0}
                     </span>
                   </div>
                   <div>
                     <span className="text-slate-400 text-[10px] block">見込み利益</span>
                     <span className="font-bold text-emerald-400">
-                      +¥{item.expected_profit?.toLocaleString()}
+                      +¥{item.expected_profit?.toLocaleString() || 0}
                     </span>
                   </div>
                 </div>
@@ -165,7 +198,7 @@ export default async function HomePage() {
           })
         ) : (
           <div className="text-center py-12 text-slate-500 text-sm">
-            データを受信中...（5〜10分周期で最新データが届きます）
+            データがまだありません。スクレイパーの実行をお待ちください。
           </div>
         )}
       </div>
