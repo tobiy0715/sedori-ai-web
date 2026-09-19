@@ -1,8 +1,8 @@
-import './globals.css';
+import type { Metadata } from 'next';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'せどりAI プロフェッショナル',
-  description: 'リアルタイム商品分析ツール',
+  description: 'Keepa・セラースケット・poipoiのイイトコ取り',
 };
 
 export default function RootLayout({
@@ -12,7 +12,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <head>
+        {/* Tailwind CSS を直接読み込んでスタイル崩れを強制解決 */}
+        <script src="https://cdn.tailwindcss.com"></script>
+      </head>
+      <body style={{ margin: 0, backgroundColor: '#020617' }}>
+        {children}
+      </body>
     </html>
   );
 }
