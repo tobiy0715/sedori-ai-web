@@ -52,7 +52,7 @@ export async function POST() {
       ai_reason: `【${rawTarget}】100クエリ展開・高額転売期待値を検出`
     }
 
-    // Gemini APIキーがある場合はDirect REST API呼び出し（ライブラリ不使用でエラーゼロ）
+    // Gemini APIキーがある場合はDirect REST API呼び出し
     if (geminiApiKey) {
       try {
         const prompt = `急上昇ワード「${rawTarget}」から、メルカリやAmazonで高騰が見込める具体的な商品名（例: ${rawTarget} 店舗限定 フィギュア）を1つ生成し、以下のJSON形式のみで出力してください。
@@ -68,9 +68,13 @@ export async function POST() {
 
         const geminiJson = await geminiRes.json()
         const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-        const jsonMatch = text.match(/\{.*\}/s)
-        if (jsonMatch) {
-          resData = JSON.parse(jsonMatch[0])
+        
+        // sフラグを使わずにJSON抽出（ビルドエラー完全回避）
+        const startIdx = text.indexOf('{')
+        const endIdx = text.lastIndexOf('}')
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          const jsonString = text.substring(startIdx, endIdx + 1)
+          resData = JSON.parse(jsonString)
         }
       } catch (e) {
         console.error('Gemini Fetch Error:', e)
