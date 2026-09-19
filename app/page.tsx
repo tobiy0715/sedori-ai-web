@@ -3,40 +3,57 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+interface Item {
+  id?: string
+  created_at?: string
+  item_title?: string
+  rank?: string
+  score?: number
+  buy_decision?: string
+  sales_speed?: string
+  ai_reason?: string
+  purchase_price?: number
+  avg_sold_price?: number
+  expected_profit?: number
+  profit_margin?: number
+  mercari_url?: string
+  amazon_url?: string
+  keepa_url?: string
+  paypay_url?: string
+  surugaya_url?: string
+  hardoff_url?: string
+}
 
 export default function Home() {
-  const [items, setItems] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
+  const [items, setItems] = useState<Item[]>([])
+  const [loading, setLoading] = useState<boolean>(false)
 
-  // DBから最新データ20件を取得
+  // DBから最新データ取得
   const fetchItems = async () => {
+    if (!supabaseUrl || !supabaseAnonKey) return
     const { data, error } = await supabase
       .from('surging_items')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(20)
 
-    if (error) {
-      console.error('データ取得エラー:', error)
-    } else if (data) {
-      setItems(data)
+    if (!error && data) {
+      setItems(data as Item[])
     }
   }
 
-  // 🔄 ボタン押下時にバックエンドAPIを直接起動 ➔ DBから最新一覧を再取得
+  // リアルタイム取得APIを実行してDB更新 ➔ 画面再読込
   const handleRealtimeTrigger = async () => {
     setLoading(true)
     try {
-      // 1. /api/scrape を叩いて Google Trends / 辞書展開から新規データをDBへ即時保存
       await fetch('/api/scrape', { method: 'POST' })
-      // 2. 保存された最新データをDBから読み込み
       await fetchItems()
     } catch (e) {
-      console.error('リアルタイム取得エラー:', e)
+      console.error('API Error:', e)
     }
     setLoading(false)
   }
@@ -66,48 +83,48 @@ export default function Home() {
         </button>
       </header>
 
-      {/* 商品カード一覧 */}
+      {/* カード一覧 */}
       <div className="space-y-4">
-        {items.map((item) => (
-          <div key={item.id || item.created_at} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
-            {/* ランク・判定・スピード */}
+        {items.map((item, idx) => (
+          <div key={item.id || item.created_at || idx} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+            {/* 上段：ランク・AI判定・スピード */}
             <div className="flex justify-between items-center mb-2 text-xs">
               <div className="flex gap-1.5 flex-wrap">
                 <span className="bg-amber-500/20 text-amber-400 font-bold px-2 py-0.5 rounded border border-amber-500/30">
-                  【{item.rank}】 {item.score}点
+                  【{item.rank || 'A+'}】 {item.score || 90}点
                 </span>
                 <span className="bg-rose-500/20 text-rose-400 font-bold px-2 py-0.5 rounded border border-rose-500/30">
                   {item.buy_decision || '🔥 即買い(BUY)'}
                 </span>
               </div>
               <span className="text-slate-400 font-medium">
-                ⏱ {item.sales_speed}
+                ⏱ {item.sales_speed || '売却目安: 1〜2日'}
               </span>
             </div>
 
             {/* タイトル */}
             <h2 className="font-bold text-sm mb-2 text-slate-100 leading-snug">{item.item_title}</h2>
 
-            {/* AI分析理由 */}
+            {/* AIコメント */}
             {item.ai_reason && (
               <p className="text-xs text-amber-200/80 bg-amber-950/30 p-2 rounded mb-3 border border-amber-900/40">
                 💬 AI分析: {item.ai_reason}
               </p>
             )}
 
-            {/* 価格・利益計算 */}
+            {/* 4項目グリッド（価格・利益・利益率） */}
             <div className="grid grid-cols-4 gap-1 text-center bg-slate-950 p-2.5 rounded-lg mb-3 text-xs">
               <div>
                 <div className="text-slate-500 text-[10px]">仕入額</div>
-                <div className="font-semibold text-slate-300">¥{item.purchase_price?.toLocaleString()}</div>
+                <div className="font-semibold text-slate-300">¥{item.purchase_price?.toLocaleString() || '0'}</div>
               </div>
               <div>
                 <div className="text-slate-500 text-[10px]">販売価格</div>
-                <div className="font-semibold text-slate-300">¥{item.avg_sold_price?.toLocaleString()}</div>
+                <div className="font-semibold text-slate-300">¥{item.avg_sold_price?.toLocaleString() || '0'}</div>
               </div>
               <div>
                 <div className="text-slate-500 text-[10px]">見込み利益</div>
-                <div className="font-bold text-emerald-400">+¥{item.expected_profit?.toLocaleString()}</div>
+                <div className="font-bold text-emerald-400">+¥{item.expected_profit?.toLocaleString() || '0'}</div>
               </div>
               <div>
                 <div className="text-slate-500 text-[10px]">利益率</div>
