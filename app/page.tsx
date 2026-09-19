@@ -1,141 +1,171 @@
-'use client';
-import { useEffect, useState } from 'react';
+import React from 'react';
 import { createClient } from '@supabase/supabase-js';
 
+// Vercel/Next.jsのキャッシュを無効化し、常に最新のDBデータを即時取得する
+export const revalidate = 0;
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export default function Home() {
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function HomePage() {
+  // 作成日時（created_at）の降順で最新20件を取得
+  const { data: items, error } = await supabase
+    .from('surging_items')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
 
-  useEffect(() => {
-    async function fetchItems() {
-      const { data, error } = await supabase
-        .from('surging_items')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        setItems(data);
-      }
-      setLoading(false);
-    }
-    fetchItems();
-  }, []);
-
-  const renderHighlightedComment = (comment: string) => {
-    if (!comment) return '';
-    const regex = /(買い|見送り|微妙|即仕入れ|要検討)/g;
-    const parts = comment.split(regex);
-
-    return parts.map((part, i) => {
-      if (part === "買い" || part === "即仕入れ") {
-        return <span key={i} style={{ color: '#facc15', fontWeight: 'bold' }}>{part}</span>;
-      } else if (part === "見送り") {
-        return <span key={i} style={{ color: '#ef4444', fontWeight: 'bold' }}>{part}</span>;
-      } else if (part === "微妙" || part === "要検討") {
-        return <span key={i} style={{ color: '#22d3ee', fontWeight: 'bold' }}>{part}</span>;
-      }
-      return part;
-    });
-  };
+  if (error) {
+    console.error('Supabase fetch error:', error);
+  }
 
   return (
-    <main style={{ backgroundColor: '#020617', color: '#ffffff', minHeight: '100vh', padding: '12px', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
-      <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-        
-        {/* iPhoneヘッダー */}
-        <div style={{ marginBottom: '16px' }}>
-          <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>🔥 せどりAI プロフェッショナル</h1>
-          <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0 0 0' }}>Keepa・セラースケット・poipoiのイイトコ取り</p>
-        </div>
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 max-w-xl mx-auto">
+      {/* ヘッダー */}
+      <header className="mb-6 border-b border-slate-800 pb-4">
+        <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-amber-200">
+          🔥 せどりAI プロフェッショナル
+        </h1>
+        <p className="text-xs text-slate-400 mt-1">
+          Keepa・セラースケット・poipoiのイイトコ取り / 5〜10分自動更新
+        </p>
+      </header>
 
-        {loading ? (
-          <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px 0' }}>読み込み中...</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {items.map((item) => (
-              <div key={item.id} style={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', padding: '14px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.5)' }}>
-                
-                {/* ランク・回転速度・セラースケット風リスク判定 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '4px' }}>
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <span style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fcd34d', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
-                      【{item.rank}】{item.score}点
+      {/* カードリスト */}
+      <div className="space-y-4">
+        {items && items.length > 0 ? (
+          items.map((item) => {
+            const formattedTime = new Date(item.created_at).toLocaleString('ja-JP', {
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+
+            return (
+              <div
+                key={item.id || item.created_at + item.item_title}
+                className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg space-y-3"
+              >
+                {/* ランク・スコア・時間 */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold px-2 py-0.5 rounded">
+                      【{item.rank}】 {item.score}点
                     </span>
-                    {item.sales_speed && (
-                      <span style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
-                        ⚡ {item.sales_speed}
-                      </span>
-                    )}
-                    {item.risk_level && item.risk_level !== '安全' && (
-                      <span style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '10px', padding: '2px 5px', borderRadius: '4px', fontWeight: 'bold' }}>
-                        {item.risk_level}
-                      </span>
-                    )}
+                    <span className="bg-emerald-500/20 text-emerald-300 font-medium px-2 py-0.5 rounded flex items-center gap-1">
+                      ⚡ {item.sales_speed}
+                    </span>
                   </div>
-                  <span style={{ fontSize: '10px', color: '#64748b' }}>
-                    {new Date(item.created_at).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  <span className="text-slate-500 font-mono text-[11px]">
+                    {formattedTime}
                   </span>
                 </div>
 
                 {/* 商品タイトル */}
-                <h2 style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '10px', lineHeight: '1.3' }}>{item.item_title}</h2>
+                <h2 className="text-base font-bold text-slate-100 leading-snug">
+                  {item.item_title}
+                </h2>
 
-                {/* 価格 & 相場 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', backgroundColor: '#020617', padding: '8px', borderRadius: '8px', marginBottom: '10px', textAlign: 'center' }}>
+                {/* 数値データ（仕入目安、相場、利益） */}
+                <div className="grid grid-cols-3 gap-2 bg-slate-950/60 p-2.5 rounded-lg text-center text-xs">
                   <div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>仕入目安</div>
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '2px' }}>¥{item.purchase_price?.toLocaleString()}</div>
+                    <span className="text-slate-400 text-[10px] block">仕入目安</span>
+                    <span className="font-semibold text-slate-200">
+                      ¥{item.purchase_price?.toLocaleString()}
+                    </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: '10px', color: '#38bdf8' }}>相場平均</div>
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#38bdf8', marginTop: '2px' }}>¥{item.avg_sold_price ? item.avg_sold_price.toLocaleString() : '-'}</div>
+                    <span className="text-slate-400 text-[10px] block">相場平均</span>
+                    <span className="font-semibold text-slate-200">
+                      ¥{item.avg_sold_price?.toLocaleString()}
+                    </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>見込み利益</div>
-                    <div style={{ fontSize: '13px', fontWeight: 'bold', color: item.expected_profit >= 0 ? '#34d399' : '#f87171', marginTop: '2px' }}>
-                      {item.expected_profit >= 0 ? '+' : ''}¥{item.expected_profit?.toLocaleString()}
-                    </div>
+                    <span className="text-slate-400 text-[10px] block">見込み利益</span>
+                    <span className="font-bold text-emerald-400">
+                      +¥{item.expected_profit?.toLocaleString()}
+                    </span>
                   </div>
                 </div>
 
-                {/* AI解析理由 */}
-                <div style={{ backgroundColor: '#1e293b', padding: '8px 10px', borderRadius: '6px', marginBottom: '10px' }}>
-                  <p style={{ fontSize: '12px', lineHeight: '1.4', margin: 0, color: '#cbd5e1' }}>
-                    💡 {renderHighlightedComment(item.ai_comment)}
-                  </p>
-                </div>
+                {/* AIディベート分析コメント */}
+                {item.ai_comment && (
+                  <div className="text-xs text-amber-200/90 bg-amber-950/30 border border-amber-900/40 p-2.5 rounded-lg leading-relaxed">
+                    💡 {item.ai_comment}
+                  </div>
+                )}
 
-                {/* 1タップ分析 & 横断サーチボタン */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px' }}>
-                  <a href={item.mercari_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#059669', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
-                    🛍️ メルカリ
-                  </a>
-                  <a href={item.amazon_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#d97706', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
-                    📦 Amazon
-                  </a>
-                  <a href={item.keepa_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#4f46e5', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none', fontWeight: 'bold' }}>
-                    📊 Keepa推移
-                  </a>
-                  <a href={item.yahoo_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#1d4ed8', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none' }}>
-                    PayPayフリマ
-                  </a>
+                {/* 各種検索・推移リンクボタン */}
+                <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px]">
+                  {item.mercari_url && (
+                    <a
+                      href={item.mercari_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-red-600/80 hover:bg-red-600 text-white text-center py-1.5 rounded font-medium transition"
+                    >
+                      🛍️ メルカリ
+                    </a>
+                  )}
+                  {item.amazon_url && (
+                    <a
+                      href={item.amazon_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-amber-600/80 hover:bg-amber-600 text-white text-center py-1.5 rounded font-medium transition"
+                    >
+                      📦 Amazon
+                    </a>
+                  )}
+                  {item.keepa_url && (
+                    <a
+                      href={item.keepa_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-indigo-600/80 hover:bg-indigo-600 text-white text-center py-1.5 rounded font-medium transition"
+                    >
+                      📊 Keepa推移
+                    </a>
+                  )}
+                  {item.yahoo_url && (
+                    <a
+                      href={item.yahoo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-blue-600/80 hover:bg-blue-600 text-white text-center py-1.5 rounded font-medium transition"
+                    >
+                      PayPayフリマ
+                    </a>
+                  )}
                   {item.surugaya_url && (
-                    <a href={item.surugaya_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#0284c7', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none' }}>
+                    <a
+                      href={item.surugaya_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-sky-700/80 hover:bg-sky-700 text-white text-center py-1.5 rounded font-medium transition"
+                    >
                       駿河屋
                     </a>
                   )}
                   {item.hardoff_url && (
-                    <a href={item.hardoff_url} target="_blank" rel="noopener noreferrer" style={{ backgroundColor: '#15803d', color: '#fff', textAlign: 'center', fontSize: '10px', padding: '7px 0', borderRadius: '6px', textDecoration: 'none' }}>
+                    <a
+                      href={item.hardoff_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-700/80 hover:bg-emerald-700 text-white text-center py-1.5 rounded font-medium transition"
+                    >
                       ハードオフ
                     </a>
                   )}
                 </div>
-
               </div>
-            ))}
+            );
+          })
+        ) : (
+          <div className="text-center py-12 text-slate-500 text-sm">
+            データを受信中...（5〜10分周期で最新データが届きます）
           </div>
         )}
       </div>
