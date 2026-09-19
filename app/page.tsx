@@ -11,7 +11,6 @@ export default function HomePage() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // データ取得処理
   const fetchItems = async () => {
     try {
       const { data, error } = await supabase
@@ -34,7 +33,6 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchItems();
-    // 30秒ごとに自動リロード
     const interval = setInterval(fetchItems, 30000);
     return () => clearInterval(interval);
   }, []);
