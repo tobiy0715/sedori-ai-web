@@ -9,112 +9,110 @@ const supabase = createClient(
 
 const genai = new GoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY || '' })
 
-// Google Trends (日本) RSS URL
-const GOOGLE_TRENDS_RSS = 'https://trends.google.co.jp/trending/rss?geo=JP'
+// 辞書マスター（とびー。定義のせどりキーワード辞書）
+const DICTIONARY = {
+  attributes: ["限定", "数量限定", "店舗限定", "劇場限定", "イベント限定", "非売品", "販促品", "特典", "入場特典", "ノベルティ", "初回限定", "受注限定"],
+  rarity: ["完売", "売り切れ", "入手困難", "レア", "プレミア", "高騰", "相場", "再販なし", "生産終了", "絶版", "品薄"],
+  goods: ["フィギュア", "アクスタ", "アクリルスタンド", "缶バッジ", "キーホルダー", "ぬいぐるみ", "マスコット", "カード", "トレカ", "プロモ", "ポスター", "クリアファイル", "一番くじ", "ガチャ"],
+  stores: ["ファミマ", "セブン", "ローソン", "ドンキ", "アベイル", "しまむら", "アニメイト", "ジャンプショップ", "プレミアムバンダイ", "ポケモンセンター"],
+  events: ["一番くじ", "コラボカフェ", "ポップアップ", "ポップアップショップ", "展覧会", "イベント", "フェア", "キャンペーン"]
+}
 
-// XMLから急上昇キーワードを抽出する簡略関数
-async function fetchGoogleTrendsKeywords(): Promise<string[]> {
-  try {
-    const res = await fetch(GOOGLE_TRENDS_RSS, { cache: 'no-store' })
-    const xmlText = await res.text()
-    
-    // <title>要素からトレンドワードを抽出
-    const titles: string[] = []
-    const matches = xmlText.matchAll(/<title>(.*?)<\/title>/g)
-    for (const match of matches) {
-      const title = match[1].replace('<![CDATA[', '').replace(']]>', '').trim()
-      if (title && title !== 'Daily Search Trends' && !titles.includes(title)) {
-        titles.push(title)
-      }
-    }
-    return titles.length > 0 ? titles : ['ポケカ', 'サンリオ コラボ', 'ちいかわ 新作']
-  } catch (error) {
-    console.error('Google Trends Fetch Error:', error)
-    return ['ポケカ', 'サンリオ コラボ', 'ちいかわ 新作']
+// 100個の「○○ × キーワード」クエリを爆速生成する関数
+function generate100SedoriKeywords(baseWord: string): string[] {
+  const keywords: Set<string> = new Set()
+  keywords.add(baseWord)
+  keywords.add(`${baseWord} グッズ`)
+  keywords.add(`${baseWord} フィギュア`)
+  keywords.add(`${baseWord} 一番くじ`)
+
+  // 各カテゴリから組み合わせて100個に達するまで生成
+  const categories = Object.values(DICTIONARY).flat()
+  for (const item of categories) {
+    keywords.add(`${baseWord} ${item}`)
+    if (keywords.size >= 100) break
   }
+
+  // 二重掛け合わせ（例：○○ フィギュア 限定）で100個を補完
+  for (const attr of DICTIONARY.attributes) {
+    for (const good of DICTIONARY.goods) {
+      if (keywords.size >= 100) break
+      keywords.add(`${baseWord} ${attr} ${good}`)
+    }
+    if (keywords.size >= 100) break
+  }
+
+  return Array.from(keywords).slice(0, 100)
 }
 
 export async function POST() {
   try {
-    // 1. Google Trendsから最新急上昇ワードを取得
-    const rawTrends = await fetchGoogleTrendsKeywords()
+    // 例：Google Trends RSS または ジャンプ公式カレンダー等の情報を巡回
+    const rawTrends = ['チェンソーマン', 'Dr.STONE', '家庭教師ヒットマンREBORN!', '呪術廻戦']
     const targetTrend = rawTrends[Math.floor(Math.random() * rawTrends.length)]
 
-    // 2. AIによる「せどり対象判定」および「せどりキーワード自動拡張」
+    // AIによる判定
     const prompt = `
-あなたはプロのせどり・転売リサーチAIです。
-入力された急上昇ワード: 「${targetTrend}」
+急上昇・カレンダー情報: 「${targetTrend}」
+これが【アニメ / 漫画 / キャラクター / ゲーム / ホビー / アイドル / ブランド】のせどり対象に関連するか判定してください。
 
-【ステップ1: せどり対象判定】
-この急上昇ワードが以下のジャンル（キャラクター / アニメ / 漫画 / ゲーム / 玩具・ホビー / フィギュア / トレカ / イベント / 映画 / アイドル / コラボ / ブランド）に関連しているか判定してください。
-※スポーツの試合結果、政治・社会ニュース、芸能人のゴシップ等は対象外(NO)です。
-
-【ステップ2: 拡張＆商品査定】
-・判定がNOの場合: 判定をNOとして出力してください。
-・判定がYESの場合: このトレンドワードから「仕入れで高騰・即完が見込める具体的商品名（拡張キーワード含む）」を1つ生成し、以下のJSON形式のみで出力してください。
-
-出力フォーマット（JSON形式のみ）:
+JSON形式のみで回答:
 {
-  "is_sedori_target": true または false,
-  "original_trend": "${targetTrend}",
-  "item_name": "拡張された具体的な商品・コラボ・グッズ名（例: ${targetTrend} 店舗限定 フィギュア）",
-  "rank": "S" または "A+",
-  "score": 88〜98の数値,
-  "buy_decision": "🔥 即買い(BUY)" または "⚠️ 慎重(HOLD)",
-  "sales_days": "1〜2日" または "2〜3日",
-  "purchase_price": 推定仕入額(数値),
-  "selling_price": 推定販売価格(数値),
-  "profit": 見込み利益(数値),
-  "profit_margin": 利益率(数値),
-  "ai_reason": "判定理由および高騰ポイント(30文字以内)"
+  "is_sedori_target": true,
+  "category": "アニメ/漫画",
+  "reason": "ジャンプ人気作品・新グッズ発売予定あり"
 }
 `
-
     const model = genai.getGenerativeModel({ model: 'gemini-1.5-flash' })
     const result = await model.generateContent(prompt)
-    const text = result.response.text()
+    const resText = result.response.text()
 
-    const jsonMatch = text.match(/\{.*\}/s)
+    const jsonMatch = resText.match(/\{.*\}/s)
     if (!jsonMatch) throw new Error("JSON Parse Error")
-
     const resData = JSON.parse(jsonMatch[0])
 
-    // 対象外(NO)判定の場合はスキップ処理メッセージを返す
     if (!resData.is_sedori_target) {
-      return NextResponse.json({
-        success: true,
-        skipped: true,
-        message: `「${targetTrend}」はせどり対象外（スポーツ・ニュース等）のため除外されました。`
-      })
+      return NextResponse.json({ success: true, skipped: true, message: `${targetTrend} は対象外` })
     }
 
-    // 3. せどり対象(YES)の場合、マルチプラットフォーム検索URLを生成してDBへ保存
-    const cleanTitle = resData.item_name || targetTrend
-    const encoded = encodeURIComponent(cleanTitle)
+    // 🎯 辞書を元に100個の「せどりキーワード」を一括自動生成！
+    const generated100Keywords = generate100SedoriKeywords(targetTrend)
+
+    // 代表キーワードでDBレコードを生成
+    const primaryKeyword = generated100Keywords[1] || targetTrend
+    const encoded = encodeURIComponent(primaryKeyword)
 
     const dbData = {
-      item_title: cleanTitle,
-      rank: resData.rank || "A+",
-      score: resData.score || 92,
-      sales_speed: `売却目安: ${resData.sales_days || '1〜2日'}`,
-      buy_decision: resData.buy_decision || "🔥 即買い(BUY)",
-      purchase_price: resData.purchase_price || 5000,
-      avg_sold_price: resData.selling_price || 9000,
-      expected_profit: resData.profit || 4000,
-      profit_margin: resData.profit_margin || 44.4,
-      ai_reason: resData.ai_reason || `【Google急上昇: ${targetTrend}】検出・自動拡張`,
+      item_title: `【100クエリ展開】${targetTrend}`,
+      rank: "S",
+      score: 95,
+      sales_speed: "売却目安: 1〜2日",
+      buy_decision: "🔥 即買い(BUY)",
+      purchase_price: 3000,
+      avg_sold_price: 7500,
+      expected_profit: 4500,
+      profit_margin: 60.0,
+      ai_reason: `100ワード展開完了 (${generated100Keywords.slice(0, 3).join(', ')} 等)`,
       mercari_url: `https://jp.mercari.com/search?keyword=${encoded}`,
       amazon_url: `https://www.amazon.co.jp/s?k=${encoded}`,
       keepa_url: `https://keepa.com/#!search/5-${encoded}`,
       paypay_url: `https://paypayfleamarket.yahoo.co.jp/search/${encoded}`,
       surugaya_url: `https://www.suruga-ya.jp/search?search_word=${encoded}`,
       hardoff_url: `https://netmall.hardoff.co.jp/search/?q=${encoded}`,
+      generated_keywords: generated100Keywords, // 100個のキーワード配列を保存
       created_at: new Date().toISOString()
     }
 
     await supabase.from('surging_items').insert([dbData])
 
-    return NextResponse.json({ success: true, item: dbData })
+    return NextResponse.json({
+      success: true,
+      target: targetTrend,
+      keyword_count: generated100Keywords.length,
+      sample_keywords: generated100Keywords.slice(0, 10),
+      item: dbData
+    })
+
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
