@@ -15,59 +15,71 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 
-def fetch_trending_topics():
-    items = []
-    try:
-        url = "https://news.yahoo.co.jp/"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            for a in soup.find_all('a', href=True):
-                text = a.get_text().strip()
-                href = a['href']
-                if len(text) > 12 and "Yahoo" not in text and "ニュース" not in text and "ログイン" not in text:
-                    if not any(item['title'] == text for item in items):
-                        items.append({
-                            "title": text,
-                            "rank": "A",
-                            "score": 75,
-                            "url": href if href.startswith('http') else "https://news.yahoo.co.jp" + href
-                        })
-                if len(items) >= 5:
-                    break
-    except Exception as e:
-        print(f"スクレイピングエラー: {e}")
+def fetch_real_trending_keywords():
+    """
+    今まさに検索・リサーチされているリアルな商品関連キーワードを収集する
+    """
+    keywords = []
     
-    if not items:
-        items = [{"title": "Nintendo Switch 2 本体発売の噂", "rank": "S", "score": 90, "url": "https://news.yahoo.co.jp/"}]
-    return items
+    # 1. Googleトレンド（日本国内のリアルタイム急上昇キーワード）
+    try:
+        url = "https://trends.google.co.jp/trends/trendingsearches/daily/rss?geo=JP"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.content, 'xml')
+            items = soup.find_all('item')
+            for item in items:
+                title = item.find('title').get_text().strip()
+                if title and len(title) > 2:
+                    keywords.append(title)
+    except Exception as e:
+        print(f"Google Trends取得エラー: {e}")
 
-def analyze_item_with_ai(item_title):
+    # 2. 補完用：Yahoo!リアルタイム検索（話題のワード）
+    if len(keywords) < 5:
+        try:
+            url = "https://search.yahoo.co.jp/realtime"
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                # 話題のキーワード要素を抽出
+                for a in soup.select('a[href*="/realtime/search"]'):
+                    text = a.get_text().strip()
+                    if text and len(text) >= 2 and text not in keywords:
+                        keywords.append(text)
+        except Exception as e:
+            print(f"Yahooリアルタイム取得エラー: {e}")
+
+    # 重複除去して抽出
+    unique_keywords = list(dict.fromkeys(keywords))
+    return unique_keywords[:5]
+
+def analyze_item_with_ai(keyword):
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
-    あなたはプロのせどり・転売アナリストです。
-    以下のニュースを分析し、具体的に利益が出そうな「商品名」を特定してください。
-    また、セラースケットのように「真贋調査・メーカー規制のリスク」も厳密に判定してください。
+    あなたはメルカリ・Amazon・ヤフオクのプロの物販アナリストです。
+    以下の急上昇トレンドキーワードから、せどり・転売・プレミア化で【実際に市場で高値取引されている具体的商品名】を1つ特定・推測してください。
 
-    【対象ニュース見出し】: {item_title}
+    【トレンドキーワード】: {keyword}
 
-    ■ カテゴリー: ゲーム / 家電・ガジェット / トレーディングカード / ホビー / アパレル・ブランド / コスメ・美容 / 日用品・食品 / その他
-    ■ 回転スピード(sales_speed): 「即売れ（24h以内）」 / 「やや早い（2〜3日）」 / 「標準（1週間以内）」 / 「回転遅め」
-    ■ リスク判定(risk_level): 「安全」 / 「⚠️ 真贋規制注意」 / 「🚫 出品制限あり」
+    ■ 指示事項:
+    1. 「限定ホビーフィギュア」のような抽象的な表現は絶対に避け、メーカー名・型番・シリーズ名・限定版などの【具体的な商品名】を出力してください。
+    2. ゲーム、ポケカ/遊戯王、フィギュア、限定スニーカー、Apple製品、レトロPC/ゲーム、コラボグッズなどを優先してください。
+    3. 価格感・利益・回転スピード・真贋リスクをリアルに見積もってください。
 
     ■ 出力フォーマット (必ず純粋なJSON形式のみで出力):
     {{
-      "target_item": "具体的な商品名",
-      "category": "選択したカテゴリー名",
-      "purchase_price": 3000,
-      "avg_sold_price": 5500,
-      "expected_profit": 1500,
-      "sales_speed": "即売れ（24h以内）",
-      "risk_level": "安全",
-      "judgment": "買い",
-      "reason": "【判定: 買い】需要が高く回転率も抜群のため。"
+      "target_item": "具体的なメーカー名・型番・商品名（例：PlayStation 5 Pro 30周年記念モデル）",
+      "category": "ゲーム / ホビー / トレカ / ガジェット / アパレル",
+      "purchase_price": 定価や見込み仕入れ値(数字のみ),
+      "avg_sold_price": メルカリ等での平均売価(数字のみ),
+      "expected_profit": 見込み利益(数字のみ),
+      "sales_speed": "即売れ（24h以内）" または "やや早い（2〜3日）" または "標準（1週間以内）",
+      "risk_level": "安全" または "⚠️ 真贋規制注意" または "🚫 出品制限あり",
+      "judgment": "買い" または "見送り" または "微妙",
+      "reason": "【判定: 買い】〇〇の理由によりメルカリ相場が高騰中。"
     }}
     """
     
@@ -77,35 +89,31 @@ def analyze_item_with_ai(item_title):
         text = re.sub(r'```json|```', '', text).strip()
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group())
+            data = json.loads(json_match.group())
+            # 「限定ホビー」などの抽象ワードが含まれていたら弾いて補正
+            if "限定ホビー" not in data.get("target_item", ""):
+                return data
     except Exception as e:
-        print(f"AI解析エラー: {e}")
+        print(f"AI解析エラー ({keyword}): {e}")
     
-    return {
-        "target_item": "限定ホビーフィギュア 最新モデル",
-        "category": "ホビー",
-        "purchase_price": 4000,
-        "avg_sold_price": 6800,
-        "expected_profit": 1800,
-        "sales_speed": "即売れ（24h以内）",
-        "risk_level": "安全",
-        "judgment": "買い",
-        "reason": "【判定: 買い】需要が高くフリマアプリでの回転率が良いため。"
-    }
+    return None
 
 def run_scraper():
-    print("=== 3大ツール全部盛り スクリプト開始 ===")
-    trending_items = fetch_trending_topics()
+    print("=== リアル自動リサーチ スクリプト開始 ===")
+    trending_keywords = fetch_real_trending_keywords()
+    print(f"取得したトレンドワード: {trending_keywords}")
 
-    for target in trending_items:
-        raw_title = target["title"]
-        ai_res = analyze_item_with_ai(raw_title)
-        
-        item_title = ai_res.get("target_item", "トレンド商品")
+    inserted_count = 0
+    for kw in trending_keywords:
+        ai_res = analyze_item_with_ai(kw)
+        if not ai_res or not ai_res.get("target_item"):
+            continue
+
+        item_title = ai_res.get("target_item")
         category = ai_res.get("category", "その他")
-        purchase_price = int(ai_res.get("purchase_price", 3000))
-        avg_sold_price = int(ai_res.get("avg_sold_price", 5000))
-        expected_profit = int(ai_res.get("expected_profit", 1000))
+        purchase_price = int(ai_res.get("purchase_price", 0))
+        avg_sold_price = int(ai_res.get("avg_sold_price", 0))
+        expected_profit = int(ai_res.get("expected_profit", 0))
         sales_speed = ai_res.get("sales_speed", "標準（1週間以内）")
         risk_level = ai_res.get("risk_level", "安全")
         judgment = ai_res.get("judgment", "微妙")
@@ -120,12 +128,12 @@ def run_scraper():
         surugaya_url = f"https://www.suruga-ya.jp/search?search_word={encoded_title}"
         hardoff_url = f"https://netmall.hardoff.co.jp/search/?q={encoded_title}"
         bookoff_url = f"https://likebit.bookoff.co.jp/search/result?q={encoded_title}"
-        keepa_url = f"https://keepa.com/#!search/5-{encoded_title}" # Keepa検索URL
+        keepa_url = f"https://keepa.com/#!search/5-{encoded_title}"
 
         record = {
             "item_title": item_title,
-            "rank": target["rank"],
-            "score": target["score"],
+            "rank": "A" if expected_profit > 3000 else "B",
+            "score": 85 if expected_profit > 3000 else 70,
             "category": category,
             "purchase_price": purchase_price,
             "avg_sold_price": avg_sold_price,
@@ -133,7 +141,7 @@ def run_scraper():
             "sales_speed": sales_speed,
             "risk_level": risk_level,
             "ai_comment": ai_comment,
-            "source_url": target["url"],
+            "source_url": f"https://www.google.com/search?q={urllib.parse.quote(kw)}",
             "mercari_url": mercari_url,
             "amazon_url": amazon_url,
             "yahoo_url": yahoo_url,
@@ -145,7 +153,10 @@ def run_scraper():
         }
 
         supabase.table("surging_items").insert(record).execute()
-        print(f"保存完了: [{category}] {item_title} (リスク: {risk_level})")
+        print(f"✅ 実戦データ保存完了: [{category}] {item_title} (見込み利益: ¥{expected_profit})")
+        inserted_count += 1
+
+    print(f"=== 完了: {inserted_count} 件のリアル商品を収集しました ===")
 
 if __name__ == "__main__":
     run_scraper()
