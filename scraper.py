@@ -15,71 +15,66 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
 
-def fetch_real_trending_keywords():
+def fetch_shopping_trends():
     """
-    今まさに検索・リサーチされているリアルな商品関連キーワードを収集する
+    価格.comやYahooニュース(IT/ガジェット/ゲーム)などから
+    具体的な商品・メーカーが載っているニュース・トレンドを取得
     """
-    keywords = []
+    topics = []
     
-    # 1. Googleトレンド（日本国内のリアルタイム急上昇キーワード）
+    # 1. Yahoo!ニュース（IT・科学・ゲームカテゴリ）から新製品ニュースを取得
     try:
-        url = "https://trends.google.co.jp/trends/trendingsearches/daily/rss?geo=JP"
-        resp = requests.get(url, timeout=10)
+        url = "https://news.yahoo.co.jp/categories/it"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code == 200:
-            soup = BeautifulSoup(resp.content, 'xml')
-            items = soup.find_all('item')
-            for item in items:
-                title = item.find('title').get_text().strip()
-                if title and len(title) > 2:
-                    keywords.append(title)
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            for a in soup.find_all('a', href=True):
+                text = a.get_text().strip()
+                if 10 < len(text) < 40 and any(k in text for k in ["発売", "限定", "新型", "コラボ", "カード", "iPhone", "Switch", "PS5", "フィギュア"]):
+                    if text not in topics:
+                        topics.append(text)
     except Exception as e:
-        print(f"Google Trends取得エラー: {e}")
+        print(f"ニュース取得エラー: {e}")
 
-    # 2. 補完用：Yahoo!リアルタイム検索（話題のワード）
-    if len(keywords) < 5:
-        try:
-            url = "https://search.yahoo.co.jp/realtime"
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                # 話題のキーワード要素を抽出
-                for a in soup.select('a[href*="/realtime/search"]'):
-                    text = a.get_text().strip()
-                    if text and len(text) >= 2 and text not in keywords:
-                        keywords.append(text)
-        except Exception as e:
-            print(f"Yahooリアルタイム取得エラー: {e}")
+    # トピックが少ない場合の予備（物販ジャンルのカテゴリ名）
+    if len(topics) < 5:
+        topics.extend([
+            "Nintendo Switch 2 本体",
+            "ポケモンカードゲーム ハイクラスパック",
+            "PlayStation 5 Pro",
+            "iPhone 16 Pro 256GB",
+            "一一番くじ ドラゴンボール 限定フィギュア"
+        ])
+        
+    return list(set(topics))[:5]
 
-    # 重複除去して抽出
-    unique_keywords = list(dict.fromkeys(keywords))
-    return unique_keywords[:5]
-
-def analyze_item_with_ai(keyword):
+def analyze_item_with_ai(topic_seed):
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = f"""
-    あなたはメルカリ・Amazon・ヤフオクのプロの物販アナリストです。
-    以下の急上昇トレンドキーワードから、せどり・転売・プレミア化で【実際に市場で高値取引されている具体的商品名】を1つ特定・推測してください。
+    あなたはメルカリ・店舗せどり（ハードオフ・ブックオフ・駿河屋）の超プロリサーチャーです。
+    以下のニュース/トレンド要素から、現在〜直近で【実際に市場で売買されている、型番やメーカー名まで含んだ具体的な利益商品名】を1つ特定してください。
 
-    【トレンドキーワード】: {keyword}
+    【トレンドのヒント】: {topic_seed}
 
-    ■ 指示事項:
-    1. 「限定ホビーフィギュア」のような抽象的な表現は絶対に避け、メーカー名・型番・シリーズ名・限定版などの【具体的な商品名】を出力してください。
-    2. ゲーム、ポケカ/遊戯王、フィギュア、限定スニーカー、Apple製品、レトロPC/ゲーム、コラボグッズなどを優先してください。
-    3. 価格感・利益・回転スピード・真贋リスクをリアルに見積もってください。
+    ■ 絶対ルール:
+    1. 「限定ホビーフィギュア」「ゲーム機本体」「カード」のような【抽象的なカテゴリ名・一般名詞は絶対に禁止】です。
+    2. 必ず「メーカー名 + シリーズ名 + 型番/モデル名/カラー/限定名」などの【店舗やメルカリで一発検索できる具体的な名称】にしてください。
+       (良い例: "ソニー WF-1000XM5 ブラック", "バンダイ S.H.Figuarts 仮面ライダー第2号", "任天堂 Nintendo Switch Lite ハイラルエディション")
+    3. 実在しない架空の型番は作らず、実在する人気モデルを厳密に出力してください。
 
     ■ 出力フォーマット (必ず純粋なJSON形式のみで出力):
     {{
-      "target_item": "具体的なメーカー名・型番・商品名（例：PlayStation 5 Pro 30周年記念モデル）",
-      "category": "ゲーム / ホビー / トレカ / ガジェット / アパレル",
-      "purchase_price": 定価や見込み仕入れ値(数字のみ),
-      "avg_sold_price": メルカリ等での平均売価(数字のみ),
-      "expected_profit": 見込み利益(数字のみ),
-      "sales_speed": "即売れ（24h以内）" または "やや早い（2〜3日）" または "標準（1週間以内）",
-      "risk_level": "安全" または "⚠️ 真贋規制注意" または "🚫 出品制限あり",
-      "judgment": "買い" または "見送り" または "微妙",
-      "reason": "【判定: 買い】〇〇の理由によりメルカリ相場が高騰中。"
+      "target_item": "メーカー名・型番・シリーズ名を含めた具体的商品名",
+      "category": "ゲーム / ホビー / トレカ / ガジェット / アパレル / 家電",
+      "purchase_price": 3000,
+      "avg_sold_price": 6800,
+      "expected_profit": 2500,
+      "sales_speed": "即売れ（24h以内）",
+      "risk_level": "安全",
+      "judgment": "買い",
+      "reason": "【判定: 買い】メルカリでの高値落札実績が多数あり、ハードオフ・ブックオフ等の中古相場差額で利益が出やすいため。"
     }}
     """
     
@@ -90,23 +85,25 @@ def analyze_item_with_ai(keyword):
         json_match = re.search(r'\{.*\}', text, re.DOTALL)
         if json_match:
             data = json.loads(json_match.group())
-            # 「限定ホビー」などの抽象ワードが含まれていたら弾いて補正
-            if "限定ホビー" not in data.get("target_item", ""):
+            item_name = data.get("target_item", "")
+            
+            # 「限定」「フィギュア」「ゲーム」等だけの抽象ワードが含まれていたらNGとして補正・除外
+            banned_abstract_words = ["限定ホビー", "最新モデル", "人気フィギュア", "トレンド商品", "ゲームソフト"]
+            if not any(bad in item_name for bad in banned_abstract_words) and len(item_name) >= 6:
                 return data
     except Exception as e:
-        print(f"AI解析エラー ({keyword}): {e}")
+        print(f"AI解析エラー: {e}")
     
     return None
 
 def run_scraper():
-    print("=== リアル自動リサーチ スクリプト開始 ===")
-    trending_keywords = fetch_real_trending_keywords()
-    print(f"取得したトレンドワード: {trending_keywords}")
+    print("=== 具体商品名特化 リサーチ開始 ===")
+    seeds = fetch_shopping_trends()
 
     inserted_count = 0
-    for kw in trending_keywords:
-        ai_res = analyze_item_with_ai(kw)
-        if not ai_res or not ai_res.get("target_item"):
+    for seed in seeds:
+        ai_res = analyze_item_with_ai(seed)
+        if not ai_res:
             continue
 
         item_title = ai_res.get("target_item")
@@ -132,8 +129,8 @@ def run_scraper():
 
         record = {
             "item_title": item_title,
-            "rank": "A" if expected_profit > 3000 else "B",
-            "score": 85 if expected_profit > 3000 else 70,
+            "rank": "S" if expected_profit >= 4000 else "A",
+            "score": 90 if expected_profit >= 4000 else 75,
             "category": category,
             "purchase_price": purchase_price,
             "avg_sold_price": avg_sold_price,
@@ -141,7 +138,7 @@ def run_scraper():
             "sales_speed": sales_speed,
             "risk_level": risk_level,
             "ai_comment": ai_comment,
-            "source_url": f"https://www.google.com/search?q={urllib.parse.quote(kw)}",
+            "source_url": "https://news.yahoo.co.jp/categories/it",
             "mercari_url": mercari_url,
             "amazon_url": amazon_url,
             "yahoo_url": yahoo_url,
@@ -153,10 +150,10 @@ def run_scraper():
         }
 
         supabase.table("surging_items").insert(record).execute()
-        print(f"✅ 実戦データ保存完了: [{category}] {item_title} (見込み利益: ¥{expected_profit})")
+        print(f"✅ 精密保存完了: [{category}] {item_title}")
         inserted_count += 1
 
-    print(f"=== 完了: {inserted_count} 件のリアル商品を収集しました ===")
+    print(f"=== 完了: {inserted_count} 件の具体的商品データを格納しました ===")
 
 if __name__ == "__main__":
     run_scraper()
