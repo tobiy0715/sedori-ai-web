@@ -31,7 +31,7 @@ export default function Home() {
   const handleScrape = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/scrape', { method: 'POST' })
+      const res = await fetch('/api/cron', { method: 'POST' })
       const json = await res.json()
       if (json.success) {
         await fetchItems() // DBから最新データを再読み込み
@@ -45,6 +45,13 @@ export default function Home() {
     }
   }
 
+  // 日時フォーマット関数
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '直近'
+    const d = new Date(dateStr)
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-white p-4 max-w-2xl mx-auto">
       {/* ヘッダー */}
@@ -53,7 +60,7 @@ export default function Home() {
           <h1 className="text-xl font-bold text-amber-400 flex items-center gap-1">
             🔥 せどりAI プロフェッショナル
           </h1>
-          <p className="text-xs text-slate-400">リアルタイム自動検出・AI利確判定</p>
+          <p className="text-xs text-slate-400">リアルタイム自動検出・利確判断エンジン</p>
         </div>
         <button
           onClick={handleScrape}
@@ -67,12 +74,22 @@ export default function Home() {
       {/* 商品リスト */}
       <div className="space-y-4">
         {items.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 text-sm">
+          <div className="text-center py-12 text-slate-500 text-sm bg-slate-900 rounded-xl border border-slate-800">
             データがありません。「リアルタイム取得」を押してください。
           </div>
         ) : (
           items.map((item) => (
             <div key={item.id || Math.random()} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md">
+              {/* 日時 & スピード表示（最上段） */}
+              <div className="flex justify-between items-center text-[11px] text-slate-400 mb-2 border-b border-slate-800/80 pb-2">
+                <span className="flex items-center gap-1 text-amber-300 font-mono">
+                  🕒 更新: {formatDate(item.created_at)}
+                </span>
+                <span className="bg-slate-800 px-2 py-0.5 rounded text-slate-300 font-medium">
+                  ⏱️ {item.sales_speed || '売却目安: 24時間以内'}
+                </span>
+              </div>
+
               {/* バッジ行 */}
               <div className="flex items-center gap-2 mb-2">
                 <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-0.5 rounded border border-amber-500/30">
@@ -81,24 +98,21 @@ export default function Home() {
                 <span className="bg-rose-500/20 text-rose-400 text-xs font-bold px-2 py-0.5 rounded border border-rose-500/30">
                   {item.buy_decision || '🔥 即買い(BUY)'}
                 </span>
-                <span className="text-xs text-slate-400 ml-auto flex items-center gap-1">
-                  ⏱️ {item.sales_speed || '売却目安: 1〜2日'}
-                </span>
               </div>
 
               {/* タイトル */}
-              <h2 className="font-bold text-base mb-3 text-slate-100">
+              <h2 className="font-bold text-base mb-3 text-slate-100 leading-snug">
                 {item.item_title}
               </h2>
 
               {/* 価格表示 */}
-              <div className="grid grid-cols-4 gap-2 bg-slate-950/60 p-2.5 rounded-lg mb-3 text-center border border-slate-800/50">
+              <div className="grid grid-cols-4 gap-2 bg-slate-950 p-2.5 rounded-lg mb-3 text-center border border-slate-800/80">
                 <div>
                   <div className="text-[10px] text-slate-400">仕入額</div>
                   <div className="text-xs font-semibold text-slate-300">¥{(item.purchase_price || 0).toLocaleString()}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-slate-400">販売価格</div>
+                  <div className="text-[10px] text-slate-400">想定売価</div>
                   <div className="text-xs font-semibold text-slate-300">¥{(item.avg_sold_price || 0).toLocaleString()}</div>
                 </div>
                 <div>
@@ -111,21 +125,22 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* AI理由 */}
+              {/* AI利確理由・相場動向 */}
               {item.ai_reason && (
-                <div className="text-xs text-slate-400 bg-slate-950/40 p-2 rounded mb-3 border border-slate-800/30">
-                  💡 {item.ai_reason}
+                <div className="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded mb-3 border border-slate-800/50 flex gap-1.5">
+                  <span>💡</span>
+                  <span className="leading-relaxed">{item.ai_reason}</span>
                 </div>
               )}
 
-              {/* 各種検索ボタン */}
+              {/* 各種仕入れ・リサーチリンク */}
               <div className="grid grid-cols-3 gap-2">
-                <a href={item.mercari_url} target="_blank" rel="noreferrer" className="bg-red-600/80 hover:bg-red-600 text-white text-xs py-1.5 rounded text-center font-medium">メルカリ</a>
-                <a href={item.amazon_url} target="_blank" rel="noreferrer" className="bg-amber-600/80 hover:bg-amber-600 text-white text-xs py-1.5 rounded text-center font-medium">Amazon</a>
-                <a href={item.keepa_url} target="_blank" rel="noreferrer" className="bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs py-1.5 rounded text-center font-medium">Keepa</a>
-                <a href={item.paypay_url} target="_blank" rel="noreferrer" className="bg-purple-600/80 hover:bg-purple-600 text-white text-xs py-1.5 rounded text-center font-medium">Yahoo!フリマ</a>
-                <a href={item.surugaya_url} target="_blank" rel="noreferrer" className="bg-blue-600/80 hover:bg-blue-600 text-white text-xs py-1.5 rounded text-center font-medium">駿河屋</a>
-                <a href={item.hardoff_url} target="_blank" rel="noreferrer" className="bg-teal-600/80 hover:bg-teal-600 text-white text-xs py-1.5 rounded text-center font-medium">ハードオフ</a>
+                <a href={item.mercari_url} target="_blank" rel="noreferrer" className="bg-red-600/80 hover:bg-red-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">メルカリ</a>
+                <a href={item.amazon_url} target="_blank" rel="noreferrer" className="bg-amber-600/80 hover:bg-amber-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Amazon</a>
+                <a href={item.keepa_url} target="_blank" rel="noreferrer" className="bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Keepa</a>
+                <a href={item.paypay_url} target="_blank" rel="noreferrer" className="bg-purple-600/80 hover:bg-purple-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Yahoo!フリマ</a>
+                <a href={item.surugaya_url} target="_blank" rel="noreferrer" className="bg-blue-600/80 hover:bg-blue-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">駿河屋</a>
+                <a href={item.hardoff_url} target="_blank" rel="noreferrer" className="bg-teal-600/80 hover:bg-teal-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">ハードオフ</a>
               </div>
             </div>
           ))
