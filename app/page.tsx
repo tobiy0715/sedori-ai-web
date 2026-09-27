@@ -209,6 +209,11 @@ export default function Home() {
           filteredItems.map((item, idx) => {
             const itemId = String(item.id || item.item_title)
             const isFav = favorites.includes(itemId)
+            const encodedTitle = encodeURIComponent(item.item_title)
+
+            // URLの生成
+            const rakkoUrl = `https://rakkokeyword.com/search?q=${encodedTitle}`
+            const googleTrendsUrl = `https://trends.google.co.jp/trends/explore?geo=JP&q=${encodedTitle}`
 
             return (
               <div key={itemId + idx} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md relative">
@@ -245,6 +250,9 @@ export default function Home() {
                       ⚡ プレ値/ライバル少
                     </span>
                   )}
+                  <span className="bg-sky-500/20 text-sky-300 text-xs font-bold px-2 py-0.5 rounded border border-sky-500/30">
+                    📈 検索トレンド上昇中
+                  </span>
                 </div>
 
                 {/* タイトル */}
@@ -280,14 +288,27 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* リサーチボタン */}
-                <div className="grid grid-cols-3 gap-2">
-                  <a href={item.mercari_url || '#'} target="_blank" rel="noreferrer" className="bg-red-600/80 hover:bg-red-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">メルカリ</a>
-                  <a href={item.amazon_url || '#'} target="_blank" rel="noreferrer" className="bg-amber-600/80 hover:bg-amber-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Amazon</a>
-                  <a href={item.keepa_url || '#'} target="_blank" rel="noreferrer" className="bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Keepa</a>
-                  <a href={item.paypay_url || '#'} target="_blank" rel="noreferrer" className="bg-purple-600/80 hover:bg-purple-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Yahoo!フリマ</a>
-                  <a href={item.surugaya_url || '#'} target="_blank" rel="noreferrer" className="bg-blue-600/80 hover:bg-blue-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">駿河屋</a>
-                  <a href={item.hardoff_url || '#'} target="_blank" rel="noreferrer" className="bg-teal-600/80 hover:bg-teal-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">ハードオフ</a>
+                {/* リサーチボタン群（相場 ＋ トレンド解析） */}
+                <div className="space-y-2">
+                  {/* 主要モール相場 */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <a href={item.mercari_url || '#'} target="_blank" rel="noreferrer" className="bg-red-600/80 hover:bg-red-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">メルカリ</a>
+                    <a href={item.amazon_url || '#'} target="_blank" rel="noreferrer" className="bg-amber-600/80 hover:bg-amber-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Amazon</a>
+                    <a href={item.keepa_url || '#'} target="_blank" rel="noreferrer" className="bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Keepa</a>
+                  </div>
+
+                  {/* トレンド & 複合リサーチボタン */}
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800/60">
+                    <a href={rakkoUrl} target="_blank" rel="noreferrer" className="bg-emerald-700/80 hover:bg-emerald-700 text-white text-xs py-1.5 rounded text-center font-medium transition-colors flex items-center justify-center gap-1">
+                      🔍 ラッコサジェスト
+                    </a>
+                    <a href={googleTrendsUrl} target="_blank" rel="noreferrer" className="bg-sky-600/80 hover:bg-sky-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors flex items-center justify-center gap-1">
+                      📊 Gトレンド
+                    </a>
+                    <a href={item.paypay_url || '#'} target="_blank" rel="noreferrer" className="bg-purple-600/80 hover:bg-purple-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">
+                      Yahoo!フリマ
+                    </a>
+                  </div>
                 </div>
               </div>
             )
