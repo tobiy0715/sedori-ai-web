@@ -68,7 +68,8 @@ export async function POST() {
       return NextResponse.json({ success: false, error: 'AIからのデータ取得に失敗しました' }, { status: 500 })
     }
 
-    // DB構造に合わせて安全にデータをセット
+    const nowISO = new Date().toISOString()
+
     const recordsToInsert = generatedItems.map((item: any) => ({
       item_title: String(item.item_title || '【急上昇】注目商品'),
       rank: String(item.rank || 'A'),
@@ -81,13 +82,13 @@ export async function POST() {
       sales_speed: String(item.sales_speed || '24h以内'),
       ai_reason: String(item.ai_reason || ''),
       seller_count: Number(item.seller_count) ?? 1,
+      created_at: nowISO,
       mercari_url: `https://jp.mercari.com/search?keyword=${encodeURIComponent(item.item_title || '')}`,
       amazon_url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(item.item_title || '')}`,
       keepa_url: `https://keepa.com/#!search/5-${encodeURIComponent(item.item_title || '')}`,
       paypay_url: `https://paypayfleamarket.yahoo.co.jp/search/${encodeURIComponent(item.item_title || '')}`
     }))
 
-    // Supabaseへ挿入
     const { error: dbError } = await supabase.from('surging_items').insert(recordsToInsert)
 
     if (dbError) {
