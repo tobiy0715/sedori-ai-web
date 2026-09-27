@@ -2,138 +2,104 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-const geminiApiKey = process.env.GEMINI_API_KEY || ''
-
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 const supabase = createClient(supabaseUrl, supabaseKey)
 
-// 利益の出るリアルなホビー・フィギュア・限定品データプール
-const REAL_ITEMS = [
-  {
-    title: "Meister Japan 武将フィギュア 1/8スケール 限定カラー",
-    buy: 4500,
-    sell: 12800,
-    score: 96,
-    reason: "ハードオフ・店舗限定品。メルカリ取引数急増中で即売れ圏内"
-  },
-  {
-    title: "海洋堂 カプセルQ ミュージアム 絶版コンプリートセット",
-    buy: 2800,
-    sell: 8900,
-    score: 93,
-    reason: "ネットモール等で低価格出品あり。セット化でプレミア化"
-  },
-  {
-    title: "チェンソーマン 劇場限定 メタル缶バッジ 10種BOX",
-    buy: 3500,
-    sell: 9800,
-    score: 95,
-    reason: "映画化発表に伴い海外需要＆国内プレ値推移を検出"
-  },
-  {
-    title: "Dr.STONE アクリルスタンド 展覧会限定コンプセット",
-    buy: 2200,
-    sell: 6500,
-    score: 91,
-    reason: "イベント限定品。駿河屋・メルカリで即完売履歴あり"
-  },
-  {
-    title: "家庭教師ヒットマンREBORN! 描き下ろし抱き枕カバー",
-    buy: 4000,
-    sell: 13500,
-    score: 94,
-    reason: "公式ショップ完売品。海外バイヤーからの買い付け需要高"
-  },
-  {
-    title: "ポケモンカードゲーム 拡張パックBOX シュリンク付き",
-    buy: 5400,
-    sell: 15800,
-    score: 98,
-    reason: "絶版リスク上昇に伴い市場取引価格が直近1週間で高騰"
-  }
-]
-
-export async function GET() {
-  return handleScrape()
-}
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 
 export async function POST() {
-  return handleScrape()
-}
-
-async function handleScrape() {
   try {
-    const selected = REAL_ITEMS[Math.floor(Math.random() * REAL_ITEMS.length)]
-    
-    let itemTitle = selected.title
-    let purchasePrice = selected.buy
-    let sellingPrice = selected.sell
-    let score = selected.score
-    let aiReason = selected.reason
+    if (!GEMINI_API_KEY) {
+      return NextResponse.json({ success: false, error: 'GEMINI_API_KEY is missing' }, { status: 500 })
+    }
 
-    // Gemini APIが利用可能な場合はAI生成を優先
-    if (geminiApiKey) {
-      try {
-        const prompt = `せどり転売で利益が出る限定ホビー・フィギュア商品を1つ生成し、以下のJSON形式のみで出力してください。
-{"item_name": "具体商品名", "score": 95, "purchase_price": 3000, "selling_price": 8500, "ai_reason": "判定理由(20文字以内)"}`
+    const prompt = `
+あなたはプロのせどり・転売リサーチャーです。
+現在、Googleトレンドやラッコキーワード、SNS、各種予約サイトで検索数が急上昇・話題沸騰している最新の利益商品・トレンド商品（フィギュア、食玩、カード、ホビー、限定本、アニメ化決定作品など）を10件分析・生成してください。
 
-        const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-          })
+以下のJSON配列フォーマットのみで出力してください。markdown記法（\`\`\`json等）は不要です。
+
+[
+  {
+    "item_title": "【急上昇】商品名や作品名・限定版",
+    "rank": "S",
+    "score": 95,
+    "buy_decision": "🔥 即買い(BUY)",
+    "purchase_price": 2500,
+    "avg_sold_price": 5800,
+    "expected_profit": 2300,
+    "profit_margin": 40,
+    "sales_speed": "即売れ(24h以内)",
+    "ai_reason": "アニメ化決定およびラッコキーワードで『予約 プレ値』の検索数が急上昇。店舗・電脳ともに即完売傾向。",
+    "trending_keywords": ["カグラバチ", "アニメ化", "決定", "プレ値"],
+    "seller_count": 0
+  }
+]
+`
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json' }
         })
-
-        const geminiJson = await geminiRes.json()
-        const text = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-        
-        const startIdx = text.indexOf('{')
-        const endIdx = text.lastIndexOf('}')
-        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-          const parsed = JSON.parse(text.substring(startIdx, endIdx + 1))
-          if (parsed.item_name) itemTitle = parsed.item_name
-          if (parsed.purchase_price) purchasePrice = parsed.purchase_price
-          if (parsed.selling_price) sellingPrice = parsed.selling_price
-          if (parsed.score) score = parsed.score
-          if (parsed.ai_reason) aiReason = parsed.ai_reason
-        }
-      } catch (e) {
-        console.error('Gemini Fetch Error:', e)
       }
+    )
+
+    if (!response.ok) {
+      const errText = await response.text()
+      return NextResponse.json({ success: false, error: `Gemini API Error: ${errText}` }, { status: 500 })
     }
 
-    const expectedProfit = sellingPrice - purchasePrice
-    const profitMargin = Math.round((expectedProfit / sellingPrice) * 1000) / 10
-    const encoded = encodeURIComponent(itemTitle)
-
-    const dbData = {
-      item_title: itemTitle,
-      rank: score >= 95 ? "S" : "A+",
-      score: score,
-      sales_speed: "売却目安: 1〜2日",
-      buy_decision: "🔥 即買い(BUY)",
-      purchase_price: purchasePrice,
-      avg_sold_price: sellingPrice,
-      expected_profit: expectedProfit,
-      profit_margin: profitMargin,
-      ai_reason: aiReason,
-      mercari_url: `https://jp.mercari.com/search?keyword=${encoded}`,
-      amazon_url: `https://www.amazon.co.jp/s?k=${encoded}`,
-      keepa_url: `https://keepa.com/#!search/5-${encoded}`,
-      paypay_url: `https://paypayfleamarket.yahoo.co.jp/search/${encoded}`,
-      surugaya_url: `https://www.suruga-ya.jp/search?search_word=${encoded}`,
-      hardoff_url: `https://netmall.hardoff.co.jp/search/?q=${encoded}`,
-      created_at: new Date().toISOString()
+    const resJson = await response.json()
+    const rawText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '[]'
+    
+    let generatedItems = []
+    try {
+      generatedItems = JSON.parse(rawText.replace(/```json|```/g, '').trim())
+    } catch (e) {
+      console.error('JSON Parse error', e)
     }
 
-    if (supabaseUrl && supabaseKey) {
-      await supabase.from('surging_items').insert([dbData])
+    if (!Array.isArray(generatedItems) || generatedItems.length === 0) {
+      return NextResponse.json({ success: false, error: 'AIからのデータ取得に失敗しました' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, item: dbData })
+    // 現在時刻をタイムスタンプとして全件に付与
+    const now = new Date().toISOString()
+    const recordsToInsert = generatedItems.map((item: any) => ({
+      item_title: item.item_title,
+      rank: item.rank || 'A',
+      score: item.score || 90,
+      buy_decision: item.buy_decision || '🔥 即買い(BUY)',
+      purchase_price: item.purchase_price || 0,
+      avg_sold_price: item.avg_sold_price || 0,
+      expected_profit: item.expected_profit || 0,
+      profit_margin: item.profit_margin || 0,
+      sales_speed: item.sales_speed || '24h以内',
+      ai_reason: item.ai_reason || '',
+      trending_keywords: item.trending_keywords || [],
+      seller_count: item.seller_count ?? 1,
+      created_at: now,
+      mercari_url: `https://jp.mercari.com/search?keyword=${encodeURIComponent(item.item_title)}`,
+      amazon_url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(item.item_title)}`,
+      keepa_url: `https://keepa.com/#!search/5-${encodeURIComponent(item.item_title)}`,
+      paypay_url: `https://paypayfleamarket.yahoo.co.jp/search/${encodeURIComponent(item.item_title)}`
+    }))
 
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    // Supabaseへ挿入
+    const { error: dbError } = await supabase.from('surging_items').insert(recordsToInsert)
+
+    if (dbError) {
+      console.error('Supabase Insert Error:', dbError)
+      return NextResponse.json({ success: false, error: dbError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, count: recordsToInsert.length })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e?.message || 'Server error' }, { status: 500 })
   }
 }
