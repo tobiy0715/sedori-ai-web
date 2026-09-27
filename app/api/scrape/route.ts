@@ -68,26 +68,23 @@ export async function POST() {
       return NextResponse.json({ success: false, error: 'AIからのデータ取得に失敗しました' }, { status: 500 })
     }
 
-    // 現在時刻をタイムスタンプとして全件に付与
-    const now = new Date().toISOString()
+    // DB構造に合わせて安全にデータをセット
     const recordsToInsert = generatedItems.map((item: any) => ({
-      item_title: item.item_title,
-      rank: item.rank || 'A',
-      score: item.score || 90,
-      buy_decision: item.buy_decision || '🔥 即買い(BUY)',
-      purchase_price: item.purchase_price || 0,
-      avg_sold_price: item.avg_sold_price || 0,
-      expected_profit: item.expected_profit || 0,
-      profit_margin: item.profit_margin || 0,
-      sales_speed: item.sales_speed || '24h以内',
-      ai_reason: item.ai_reason || '',
-      trending_keywords: item.trending_keywords || [],
-      seller_count: item.seller_count ?? 1,
-      created_at: now,
-      mercari_url: `https://jp.mercari.com/search?keyword=${encodeURIComponent(item.item_title)}`,
-      amazon_url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(item.item_title)}`,
-      keepa_url: `https://keepa.com/#!search/5-${encodeURIComponent(item.item_title)}`,
-      paypay_url: `https://paypayfleamarket.yahoo.co.jp/search/${encodeURIComponent(item.item_title)}`
+      item_title: String(item.item_title || '【急上昇】注目商品'),
+      rank: String(item.rank || 'A'),
+      score: Number(item.score) || 90,
+      buy_decision: String(item.buy_decision || '🔥 即買い(BUY)'),
+      purchase_price: Number(item.purchase_price) || 0,
+      avg_sold_price: Number(item.avg_sold_price) || 0,
+      expected_profit: Number(item.expected_profit) || 0,
+      profit_margin: Number(item.profit_margin) || 0,
+      sales_speed: String(item.sales_speed || '24h以内'),
+      ai_reason: String(item.ai_reason || ''),
+      seller_count: Number(item.seller_count) ?? 1,
+      mercari_url: `https://jp.mercari.com/search?keyword=${encodeURIComponent(item.item_title || '')}`,
+      amazon_url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(item.item_title || '')}`,
+      keepa_url: `https://keepa.com/#!search/5-${encodeURIComponent(item.item_title || '')}`,
+      paypay_url: `https://paypayfleamarket.yahoo.co.jp/search/${encodeURIComponent(item.item_title || '')}`
     }))
 
     // Supabaseへ挿入
@@ -95,7 +92,7 @@ export async function POST() {
 
     if (dbError) {
       console.error('Supabase Insert Error:', dbError)
-      return NextResponse.json({ success: false, error: dbError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: `DB Error: ${dbError.message}` }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, count: recordsToInsert.length })
