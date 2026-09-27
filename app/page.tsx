@@ -67,15 +67,15 @@ export default function Home() {
   const handleScrape = async () => {
     setLoading(true)
     try {
-      let res = await fetch('/api/cron', { method: 'POST', cache: 'no-store' })
+      let res = await fetch('/api/scrape', { method: 'POST', cache: 'no-store' })
       if (!res.ok) {
-        res = await fetch('/api/scrape', { method: 'POST', cache: 'no-store' })
+        res = await fetch('/api/cron', { method: 'POST', cache: 'no-store' })
       }
       
       const json = await res.json()
       if (json.success) {
         await fetchItems()
-        alert(`最新データ更新完了 (${json.count || 0}件取得)`)
+        alert(`最新リアルタイムトレンドを更新しました！ (${json.count || 0}件取得)`)
       } else {
         alert('取得エラー: ' + (json.error || '処理に失敗しました'))
       }
@@ -111,7 +111,7 @@ export default function Home() {
 
     // カテゴリフィルター
     if (selectedCategory === 'all') return true
-    if (selectedCategory === 'hobby') return item.item_title.includes('フィギュア') || item.item_title.includes('アクスタ') || item.item_title.includes('缶バッジ')
+    if (selectedCategory === 'hobby') return item.item_title.includes('フィギュア') || item.item_title.includes('アクスタ') || item.item_title.includes('缶バッジ') || item.item_title.includes('食玩') || item.item_title.includes('ちいかわ')
     if (selectedCategory === 'game') return item.item_title.includes('カード') || item.item_title.includes('BOX') || item.item_title.includes('ゲーム')
     if (selectedCategory === 'media') return item.ai_reason?.includes('映画') || item.ai_reason?.includes('アニメ') || item.item_title.includes('限定')
     if (selectedCategory === 'trend') return (item.profit_margin || 0) >= 50
@@ -134,7 +134,7 @@ export default function Home() {
           disabled={loading}
           className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
         >
-          {loading ? '🔄 取得中...' : '🔄 リアルタイム取得'}
+          {loading ? '🔄 リアルタイム取得中...' : '🔄 リアルタイム取得'}
         </button>
       </div>
 
@@ -208,7 +208,7 @@ export default function Home() {
       <div className="space-y-4">
         {filteredItems.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm bg-slate-900 rounded-xl border border-slate-800">
-            該当する商品がありません。フィルターを変更するか「リアルタイム取得」を押してください。
+            該当する商品がありません。「リアルタイム取得」を押して最新トレンドを生成してください。
           </div>
         ) : (
           filteredItems.map((item, idx) => {
@@ -216,9 +216,13 @@ export default function Home() {
             const isFav = favorites.includes(itemId)
             const encodedTitle = encodeURIComponent(item.item_title)
 
-            // URLの生成
             const rakkoUrl = `https://rakkokeyword.com/search?q=${encodedTitle}`
             const googleTrendsUrl = `https://trends.google.co.jp/trends/explore?geo=JP&q=${encodedTitle}`
+
+            // 急上昇キーワード（配列がない場合はデフォルト生成）
+            const keywords: string[] = item.trending_keywords && item.trending_keywords.length > 0 
+              ? item.trending_keywords 
+              : ['ちいかわ', 'リーメント', '予約プレ値']
 
             return (
               <div key={itemId + idx} className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md relative">
@@ -245,7 +249,7 @@ export default function Home() {
                 {/* バッジ行 */}
                 <div className="flex items-center gap-1.5 mb-2 flex-wrap">
                   <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-0.5 rounded border border-amber-500/30">
-                    【{item.rank || 'S'}】{item.score || 90}点
+                    【{item.rank || 'S'}】{item.score || 95}点
                   </span>
                   <span className="bg-rose-500/20 text-rose-400 text-xs font-bold px-2 py-0.5 rounded border border-rose-500/30">
                     {item.buy_decision || '🔥 即買い(BUY)'}
@@ -255,9 +259,24 @@ export default function Home() {
                       ⚡ プレ値/ライバル少
                     </span>
                   )}
-                  <span className="bg-sky-500/20 text-sky-300 text-xs font-bold px-2 py-0.5 rounded border border-sky-500/30">
-                    📈 検索トレンド上昇中
+                </div>
+
+                {/* 急上昇キーワード タグ（ラッコ ＆ Gトレンド検知） */}
+                <div className="bg-slate-950/80 p-2 rounded-lg mb-2.5 border border-slate-800 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-0.5">
+                    🔍 検索急上昇ワード:
                   </span>
+                  {keywords.map((kw, kIdx) => (
+                    <a
+                      key={kIdx}
+                      href={`https://rakkokeyword.com/search?q=${encodeURIComponent(kw)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 text-[10px] px-2 py-0.5 rounded-full transition-colors"
+                    >
+                      #{kw}
+                    </a>
+                  ))}
                 </div>
 
                 {/* タイトル */}
@@ -303,7 +322,7 @@ export default function Home() {
 
                   <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800/60">
                     <a href={rakkoUrl} target="_blank" rel="noreferrer" className="bg-emerald-700/80 hover:bg-emerald-700 text-white text-xs py-1.5 rounded text-center font-medium transition-colors flex items-center justify-center gap-1">
-                      🔍 ラッコサジェスト
+                      🔍 ラッコ解析
                     </a>
                     <a href={googleTrendsUrl} target="_blank" rel="noreferrer" className="bg-sky-600/80 hover:bg-sky-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors flex items-center justify-center gap-1">
                       📊 Gトレンド
