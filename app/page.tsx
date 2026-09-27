@@ -43,17 +43,21 @@ export default function Home() {
     localStorage.setItem('sedori_favorites', JSON.stringify(updated))
   }
 
-  // データの取得
+  // データの取得（最新30件）
   const fetchItems = async () => {
     if (!supabaseUrl || !supabaseKey) return
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('surging_items')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(30)
 
-      if (data) setItems(data)
+      if (data) {
+        setItems(data)
+      } else if (error) {
+        console.error('Supabase fetch error:', error)
+      }
     } catch (e) {
       console.error('Fetch error:', e)
     }
@@ -63,14 +67,15 @@ export default function Home() {
   const handleScrape = async () => {
     setLoading(true)
     try {
-      let res = await fetch('/api/cron', { method: 'POST' })
+      let res = await fetch('/api/cron', { method: 'POST', cache: 'no-store' })
       if (!res.ok) {
-        res = await fetch('/api/scrape', { method: 'POST' })
+        res = await fetch('/api/scrape', { method: 'POST', cache: 'no-store' })
       }
       
       const json = await res.json()
       if (json.success) {
         await fetchItems()
+        alert(`最新データ更新完了 (${json.count || 0}件取得)`)
       } else {
         alert('取得エラー: ' + (json.error || '処理に失敗しました'))
       }
@@ -116,18 +121,18 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-4 max-w-2xl mx-auto pb-20">
-      {/* ヘッダー */}
-      <div className="flex justify-between items-center mb-4 pt-2">
-        <div>
-          <h1 className="text-xl font-bold text-amber-400 flex items-center gap-1">
-            🔥 せどりAI プロフェッショナル
+      {/* 洗練されたヘッダー */}
+      <div className="flex justify-between items-center mb-5 pt-2 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🔥</span>
+          <h1 className="text-lg font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-orange-400 to-amber-200">
+            PROFIT HUNTER AI
           </h1>
-          <p className="text-xs text-slate-400">リアルタイム自動検出・利確判断エンジン</p>
         </div>
         <button
           onClick={handleScrape}
           disabled={loading}
-          className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold px-3 py-2 rounded-lg text-sm flex items-center gap-1 shadow-lg transition-all disabled:opacity-50"
+          className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition-all disabled:opacity-50 whitespace-nowrap shrink-0"
         >
           {loading ? '🔄 取得中...' : '🔄 リアルタイム取得'}
         </button>
@@ -288,16 +293,14 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* リサーチボタン群（相場 ＋ トレンド解析） */}
+                {/* リサーチボタン群 */}
                 <div className="space-y-2">
-                  {/* 主要モール相場 */}
                   <div className="grid grid-cols-3 gap-2">
                     <a href={item.mercari_url || '#'} target="_blank" rel="noreferrer" className="bg-red-600/80 hover:bg-red-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">メルカリ</a>
                     <a href={item.amazon_url || '#'} target="_blank" rel="noreferrer" className="bg-amber-600/80 hover:bg-amber-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Amazon</a>
                     <a href={item.keepa_url || '#'} target="_blank" rel="noreferrer" className="bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs py-1.5 rounded text-center font-medium transition-colors">Keepa</a>
                   </div>
 
-                  {/* トレンド & 複合リサーチボタン */}
                   <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800/60">
                     <a href={rakkoUrl} target="_blank" rel="noreferrer" className="bg-emerald-700/80 hover:bg-emerald-700 text-white text-xs py-1.5 rounded text-center font-medium transition-colors flex items-center justify-center gap-1">
                       🔍 ラッコサジェスト
